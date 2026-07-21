@@ -12,17 +12,27 @@ import {
   Keyboard,
   ScrollView,
   FlatList,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../theme/colors';
 
-function ExerciseCard({ item }) {
+function ExerciseCard({ item, onDelete }) {
+  const isFailure = item.rir === '0';
+
   return (
     <View style={styles.exerciseCard}>
       <View style={styles.cardHeader}>
         <Text style={styles.exerciseName}>{item.name}</Text>
-        <Ionicons name="ellipsis-horizontal" size={20} color={Colors.textMuted} />
+
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => onDelete(item.id)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="trash-outline" size={18} color={Colors.error} />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.badgeContainer}>
@@ -35,6 +45,19 @@ function ExerciseCard({ item }) {
           <Ionicons name="repeat-outline" size={14} color={Colors.primary} />
           <Text style={styles.badgeText}>{item.reps} Tekrar</Text>
         </View>
+
+        {item.rir !== undefined && item.rir !== '' && (
+          <View style={[styles.badge, isFailure && styles.badgeFailure]}>
+            <Ionicons
+              name={isFailure ? 'flame' : 'speedometer-outline'}
+              size={14}
+              color={isFailure ? '#FF6B6B' : Colors.primary}
+            />
+            <Text style={[styles.badgeText, isFailure && styles.badgeTextFailure]}>
+              {isFailure ? 'Tükeniş (RIR 0)' : `RIR: ${item.rir}`}
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -58,6 +81,7 @@ export default function DayDetailScreen({ route, navigation }) {
   const [exerciseName, setExerciseName] = useState('');
   const [sets, setSets] = useState('');
   const [reps, setReps] = useState('');
+  const [rir, setRir] = useState('');
 
   // Sayfa yüklendiğinde AsyncStorage'dan veriyi oku
   useEffect(() => {
@@ -90,6 +114,7 @@ export default function DayDetailScreen({ route, navigation }) {
     setExerciseName('');
     setSets('');
     setReps('');
+    setRir('');
   };
 
   const handleSaveExercise = () => {
@@ -100,13 +125,51 @@ export default function DayDetailScreen({ route, navigation }) {
       name: exerciseName.trim(),
       sets: sets.trim() || '1',
       reps: reps.trim() || '1',
+      rir: rir.trim(),
     };
 
     setExercises((prev) => [...prev, newExercise]);
     handleCloseModal();
   };
 
-  // Gerçek Kaydetme İşlemi
+  // Silme Fonksiyonu (Web/Mobil Onay + State + Otomatik AsyncStorage Kaydı)
+  const handleDeleteExercise = (exerciseId) => {
+    const confirmMessage = 'Bu hareketi silmek istediğinize emin misiniz?';
+
+    const performDelete = async () => {
+      const updatedExercises = exercises.filter((ex) => ex.id !== exerciseId);
+      setExercises(updatedExercises);
+
+      try {
+        const dataToSave = {
+          dayTitle,
+          exercises: updatedExercises,
+        };
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+      } catch (error) {
+        console.warn('Hareket silinirken kaydetme hatası:', error);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(confirmMessage);
+      if (confirmed) {
+        performDelete();
+      }
+    } else {
+      Alert.alert(
+        'Hareketi Sil',
+        confirmMessage,
+        [
+          { text: 'İptal', style: 'cancel' },
+          { text: 'Evet', style: 'destructive', onPress: performDelete },
+        ],
+        { cancelable: true }
+      );
+    }
+  };
+
+  // Gerçek Kaydetme İşlemi (Header Butonu)
   const handleSaveDay = async () => {
     try {
       const dataToSave = {
@@ -172,7 +235,9 @@ export default function DayDetailScreen({ route, navigation }) {
         <FlatList
           data={exercises}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ExerciseCard item={item} />}
+          renderItem={({ item }) => (
+            <ExerciseCard item={item} onDelete={handleDeleteExercise} />
+          )}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
         />
@@ -222,7 +287,7 @@ export default function DayDetailScreen({ route, navigation }) {
                       />
                     </View>
 
-                    {/* Sets & Reps Inputs Row */}
+                    {/* Sets, Reps & RIR Inputs Row */}
                     <View style={styles.inputRow}>
                       <View style={[styles.inputGroup, { flex: 1 }]}>
                         <Text style={styles.inputLabel}>Set Sayısı</Text>
@@ -247,7 +312,24 @@ export default function DayDetailScreen({ route, navigation }) {
                           onChangeText={(text) => setReps(text.replace(/[^0-9]/g, ''))}
                         />
                       </View>
+
+                      <View style={[styles.inputGroup, { flex: 1 }]}>
+                        <Text style={styles.inputLabel}>RIR</Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          placeholder="RIR (Örn: 1)"
+                          placeholderTextColor={Colors.textMuted}
+                          keyboardType="numeric"
+                          value={rir}
+                          onChangeText={(text) => setRir(text.replace(/[^0-9]/g, ''))}
+                        />
+                      </View>
                     </View>
+
+                    {/* RIR Information Subtext */}
+                    <Text style={styles.rirInfoText}>
+                      RIR: Set bittiğinde yapabileceğiniz fazladan tekrar sayısıdır (0 = Tam Tükeniş)
+                    </Text>
 
                     {/* Action Buttons */}
                     <View style={styles.modalButtonContainer}>
@@ -409,6 +491,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.textPrimary,
   },
+  deleteButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.error + '15',
+  },
   badgeContainer: {
     flexDirection: 'row',
     gap: 8,
@@ -425,10 +512,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.primary + '20',
   },
+  badgeFailure: {
+    backgroundColor: 'rgba(255, 107, 107, 0.15)',
+    borderColor: 'rgba(255, 107, 107, 0.3)',
+  },
   badgeText: {
     fontSize: 13,
     fontWeight: '600',
     color: Colors.primary,
+  },
+  badgeTextFailure: {
+    color: '#FF6B6B',
   },
   fab: {
     position: 'absolute',
@@ -521,10 +615,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  rirInfoText: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
+    marginTop: 4,
+    marginBottom: 16,
+    lineHeight: 18,
+  },
   modalButtonContainer: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 12,
+    marginTop: 4,
     marginBottom: 10,
   },
   modalButton: {

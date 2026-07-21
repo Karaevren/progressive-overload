@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,15 @@ import {
   TextInput,
   TouchableWithoutFeedback,
   Keyboard,
+  Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../theme/colors';
 import { useLanguage } from '../context/LanguageContext';
+
+const ROUTINES_STORAGE_KEY = '@routines_list';
 
 const PROGRAM_ICONS = [
   { name: 'flame-outline', color: '#FF6B6B' },
@@ -54,7 +59,7 @@ function getInitialPrograms(t) {
   ];
 }
 
-function ProgramCard({ program, t, onPress }) {
+function ProgramCard({ program, t, onPress, onDelete }) {
   return (
     <TouchableOpacity
       style={styles.card}
@@ -112,6 +117,18 @@ function ProgramCard({ program, t, onPress }) {
           </View>
         </View>
 
+        {/* Right: Delete Button */}
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            onDelete(program.id);
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="trash-outline" size={18} color={Colors.error} />
+        </TouchableOpacity>
+
         {/* Right: Chevron */}
         <View style={styles.cardChevron}>
           <Ionicons
@@ -127,7 +144,32 @@ function ProgramCard({ program, t, onPress }) {
 
 export default function RoutinesScreen({ navigation }) {
   const { t } = useLanguage();
-  const [programs, setPrograms] = useState(() => getInitialPrograms(t));
+  const [programs, setPrograms] = useState([]);
+
+  // Load routines from AsyncStorage or fallback to initial programs
+  useEffect(() => {
+    const loadRoutines = async () => {
+      try {
+        const savedData = await AsyncStorage.getItem(ROUTINES_STORAGE_KEY);
+        if (savedData) {
+          const parsed = JSON.parse(savedData);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPrograms(parsed);
+            return;
+          }
+        }
+        // Fallback if empty
+        const initial = getInitialPrograms(t);
+        setPrograms(initial);
+        await AsyncStorage.setItem(ROUTINES_STORAGE_KEY, JSON.stringify(initial));
+      } catch (error) {
+        console.warn('Programlar yüklenirken hata:', error);
+        setPrograms(getInitialPrograms(t));
+      }
+    };
+
+    loadRoutines();
+  }, [t]);
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [newRoutineName, setNewRoutineName] = useState('');
@@ -141,11 +183,10 @@ export default function RoutinesScreen({ navigation }) {
     setNewRoutineName('');
   };
 
-  const handleCreateRoutine = () => {
+  const handleCreateRoutine = async () => {
     const trimmedName = newRoutineName.trim();
     if (!trimmedName) return;
 
-    // Rastgele ikon ve accent rengi seçimi
     const randomIcon = PROGRAM_ICONS[programs.length % PROGRAM_ICONS.length];
 
     const newProgram = {
@@ -158,8 +199,49 @@ export default function RoutinesScreen({ navigation }) {
       accentColor: randomIcon.color,
     };
 
-    setPrograms((prev) => [newProgram, ...prev]);
+    const updatedList = [newProgram, ...programs];
+    setPrograms(updatedList);
+
+    try {
+      await AsyncStorage.setItem(ROUTINES_STORAGE_KEY, JSON.stringify(updatedList));
+    } catch (error) {
+      console.warn('Yeni program kaydedilirken hata:', error);
+    }
+
     handleCloseModal();
+  };
+
+  // Program Silme Mantığı (Platform Onaylı + AsyncStorage Entegrasyonu)
+  const handleDeleteRoutine = (programId) => {
+    const confirmMessage = 'Bu programı silmek istediğinize emin misiniz?';
+
+    const performDelete = async () => {
+      const updatedPrograms = programs.filter((p) => p.id !== programId);
+      setPrograms(updatedPrograms);
+
+      try {
+        await AsyncStorage.setItem(ROUTINES_STORAGE_KEY, JSON.stringify(updatedPrograms));
+      } catch (error) {
+        console.warn('Program silinirken hata:', error);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(confirmMessage);
+      if (confirmed) {
+        performDelete();
+      }
+    } else {
+      Alert.alert(
+        'Programı Sil',
+        confirmMessage,
+        [
+          { text: 'İptal', style: 'cancel' },
+          { text: 'Evet', style: 'destructive', onPress: performDelete },
+        ],
+        { cancelable: true }
+      );
+    }
   };
 
   const handleProgramPress = (program) => {
@@ -197,6 +279,7 @@ export default function RoutinesScreen({ navigation }) {
             program={program}
             t={t}
             onPress={() => handleProgramPress(program)}
+            onDelete={handleDeleteRoutine}
           />
         ))}
 
@@ -399,8 +482,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.textMuted,
     marginHorizontal: 8,
   },
+  deleteButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.error + '15',
+    marginRight: 6,
+  },
   cardChevron: {
-    marginLeft: 8,
+    marginLeft: 4,
     width: 32,
     height: 32,
     borderRadius: 10,
