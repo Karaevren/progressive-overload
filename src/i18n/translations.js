@@ -85,6 +85,9 @@ export const translations = {
       mockProgram2Desc: 'Klasik PPL programı',
       mockProgram3: 'Kardiyo & Core',
       mockProgram3Desc: 'Kondisyon ve karın kası odaklı',
+      // Detail screen
+      emptyStateText: 'Henüz hareket eklenmedi.\nYeni hareket eklemek için + butonuna basın.',
+      addExercise: 'Hareket Ekle',
     },
 
     // Common
@@ -183,6 +186,9 @@ export const translations = {
       mockProgram2Desc: 'Classic PPL program',
       mockProgram3: 'Cardio & Core',
       mockProgram3Desc: 'Conditioning and abs focused',
+      // Detail screen
+      emptyStateText: 'No exercises added yet.\nTap the + button to add a new exercise.',
+      addExercise: 'Add Exercise',
     },
 
     // Common

@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
+  Modal,
+  TextInput,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
@@ -15,9 +18,11 @@ const PROGRAM_ICONS = [
   { name: 'flame-outline', color: '#FF6B6B' },
   { name: 'repeat-outline', color: '#6C63FF' },
   { name: 'heart-outline', color: '#00E5A0' },
+  { name: 'fitness-outline', color: '#FFB84D' },
+  { name: 'barbell-outline', color: '#00B8D4' },
 ];
 
-function getMockPrograms(t) {
+function getInitialPrograms(t) {
   return [
     {
       id: '1',
@@ -120,20 +125,48 @@ function ProgramCard({ program, t, onPress }) {
   );
 }
 
-export default function RoutinesScreen() {
+export default function RoutinesScreen({ navigation }) {
   const { t } = useLanguage();
-  const programs = getMockPrograms(t);
+  const [programs, setPrograms] = useState(() => getInitialPrograms(t));
 
-  const handleAddProgram = () => {
-    Alert.alert(
-      t('routines.addNew'),
-      t('routines.addNewAlert'),
-      [{ text: 'OK' }]
-    );
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [newRoutineName, setNewRoutineName] = useState('');
+
+  const handleOpenModal = () => {
+    setIsModalVisible(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalVisible(false);
+    setNewRoutineName('');
+  };
+
+  const handleCreateRoutine = () => {
+    const trimmedName = newRoutineName.trim();
+    if (!trimmedName) return;
+
+    // Rastgele ikon ve accent rengi seçimi
+    const randomIcon = PROGRAM_ICONS[programs.length % PROGRAM_ICONS.length];
+
+    const newProgram = {
+      id: Date.now().toString(),
+      name: trimmedName,
+      description: 'Yeni Oluşturulan Program',
+      daysPerWeek: 0,
+      exerciseCount: 0,
+      icon: randomIcon,
+      accentColor: randomIcon.color,
+    };
+
+    setPrograms((prev) => [newProgram, ...prev]);
+    handleCloseModal();
   };
 
   const handleProgramPress = (program) => {
-    console.log('Program selected:', program.name);
+    navigation.navigate('RoutineDetail', {
+      programId: program.id,
+      programName: program.name,
+    });
   };
 
   return (
@@ -175,12 +208,71 @@ export default function RoutinesScreen() {
       <TouchableOpacity
         style={styles.fab}
         activeOpacity={0.8}
-        onPress={handleAddProgram}
+        onPress={handleOpenModal}
       >
         <View style={styles.fabGlow} />
         <Ionicons name="add" size={28} color={Colors.background} />
         <Text style={styles.fabText}>{t('routines.addNew')}</Text>
       </TouchableOpacity>
+
+      {/* Slide-Up Modal */}
+      <Modal
+        visible={isModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCloseModal}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                {/* Modal Header Handle */}
+                <View style={styles.modalHandle} />
+
+                <Text style={styles.modalTitle}>{t('routines.addNew')}</Text>
+
+                {/* Input Field */}
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Antrenman Adı, örn: Bacak Günü"
+                  placeholderTextColor={Colors.textMuted}
+                  value={newRoutineName}
+                  onChangeText={setNewRoutineName}
+                  autoFocus={true}
+                />
+
+                {/* Action Buttons */}
+                <View style={styles.modalButtonContainer}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={handleCloseModal}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.cancelButtonText}>
+                      {t('common.cancel')}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.modalButton,
+                      styles.createButton,
+                      !newRoutineName.trim() && styles.disabledButton,
+                    ]}
+                    onPress={handleCreateRoutine}
+                    disabled={!newRoutineName.trim()}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.createButtonText}>
+                      {t('common.save')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -356,5 +448,79 @@ const styles = StyleSheet.create({
   // Bottom spacer
   bottomSpacer: {
     height: 100,
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: Colors.borderLight,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: 18,
+  },
+  modalInput: {
+    backgroundColor: Colors.surfaceLight,
+    color: Colors.textPrimary,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 24,
+  },
+  modalButtonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: Colors.surfaceLight,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cancelButtonText: {
+    color: Colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  createButton: {
+    backgroundColor: Colors.primary,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  createButtonText: {
+    color: Colors.background,
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

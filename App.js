@@ -4,7 +4,7 @@ import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
 import { SettingsProvider } from './src/context/SettingsContext';
-import BottomTabs from './src/navigation/BottomTabs';
+import RootNavigator from './src/navigation/RootNavigator';
 import { Colors } from './src/theme/colors';
 
 function AppContent() {
@@ -50,7 +50,7 @@ function AppContent() {
         },
       }}
     >
-      <BottomTabs />
+      <RootNavigator />
       <StatusBar style="light" />
     </NavigationContainer>
   );
