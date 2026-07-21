@@ -1,34 +1,108 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Switch,
-} from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, TextInput, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../theme/colors';
 import { useLanguage } from '../context/LanguageContext';
+import { useSettings } from '../context/SettingsContext';
 
-function SettingRow({ icon, iconColor, title, subtitle, right }) {
-  return (
-    <View style={styles.settingRow}>
-      <View style={[styles.settingIcon, { backgroundColor: iconColor + '20' }]}>
-        <Ionicons name={icon} size={20} color={iconColor} />
-      </View>
-      <View style={styles.settingTextContainer}>
-        <Text style={styles.settingTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.settingSubtitle}>{subtitle}</Text> : null}
-      </View>
-      <View style={styles.settingRight}>{right}</View>
+const SettingRow = ({ icon, title, subtitle, right, onPress }) => (
+  <TouchableOpacity 
+    style={styles.settingRow} 
+    onPress={onPress}
+    disabled={!onPress}
+  >
+    <View style={styles.settingIconContainer}>
+      <Ionicons name={icon} size={20} color={Colors.primary} />
     </View>
-  );
-}
+    <View style={styles.settingTextContainer}>
+      <Text style={styles.settingTitle}>{title}</Text>
+      {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+    </View>
+    {right && <View style={styles.settingRight}>{right}</View>}
+  </TouchableOpacity>
+);
 
-export default function ProfileScreen() {
+const ProfileScreen = () => {
   const { t, locale, changeLanguage } = useLanguage();
-  const isTurkish = locale === 'tr';
+  const { 
+    units, 
+    darkMode, 
+    notifications, 
+    toggleUnits, 
+    toggleDarkMode, 
+    toggleNotifications,
+    formatWeight,
+    convertWeight
+  } = useSettings();
+
+  const [userName, setUserName] = useState('Ahmet Karaevren');
+  const [userWeight, setUserWeight] = useState(77); // Stored in kg
+
+  const [inputName, setInputName] = useState('');
+  const [inputWeight, setInputWeight] = useState('');
+
+  useEffect(() => {
+    loadProfileData();
+  }, []);
+
+  useEffect(() => {
+    setInputName(userName);
+  }, [userName]);
+
+  useEffect(() => {
+    // When settings change or weight changes, update the input string
+    if (units === 'lb') {
+      setInputWeight(Math.round(userWeight * 2.20462).toString());
+    } else {
+      setInputWeight(userWeight.toString());
+    }
+  }, [userWeight, units]);
+
+  const loadProfileData = async () => {
+    try {
+      const storedName = await AsyncStorage.getItem('@profile_name');
+      const storedWeight = await AsyncStorage.getItem('@profile_weight');
+      
+      if (storedName) {
+        setUserName(storedName);
+      }
+      if (storedWeight) {
+        setUserWeight(parseFloat(storedWeight));
+      }
+    } catch (e) {
+      console.error('Failed to load profile data', e);
+    }
+  };
+
+  const saveName = async () => {
+    try {
+      const newName = inputName.trim() || 'Ahmet Karaevren';
+      setUserName(newName);
+      setInputName(newName);
+      await AsyncStorage.setItem('@profile_name', newName);
+    } catch (e) {
+      console.error('Failed to save name', e);
+    }
+  };
+
+  const saveWeight = async () => {
+    try {
+      let weightVal = parseFloat(inputWeight);
+      if (isNaN(weightVal) || weightVal <= 0) {
+        weightVal = userWeight; // revert on invalid
+      } else {
+        if (units === 'lb') {
+          weightVal = weightVal / 2.20462;
+        }
+      }
+      setUserWeight(weightVal);
+      await AsyncStorage.setItem('@profile_weight', weightVal.toString());
+      Keyboard.dismiss();
+    } catch (e) {
+      console.error('Failed to save weight', e);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -36,142 +110,152 @@ export default function ProfileScreen() {
         <Text style={styles.headerTitle}>{t('screenTitles.profile')}</Text>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Profile Avatar Section */}
-        <View style={styles.avatarSection}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        
+        {/* Avatar Section */}
+        <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatarGlow} />
             <View style={styles.avatar}>
               <Ionicons name="person" size={40} color={Colors.primary} />
             </View>
           </View>
-          <Text style={styles.avatarName}>{t('profile.namePlaceholder')}</Text>
-          <Text style={styles.avatarEmail}>{t('profile.emailPlaceholder')}</Text>
+          <Text style={styles.userName}>{userName}</Text>
+          <Text style={styles.userStats}>{formatWeight(userWeight)}</Text>
         </View>
 
-        {/* Language Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('langSelector.title')}</Text>
-          <View style={styles.card}>
-            <View style={styles.languageToggleContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.languageButton,
-                  isTurkish && styles.languageButtonActive,
-                ]}
-                onPress={() => changeLanguage('tr')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.languageFlag}>🇹🇷</Text>
-                <Text
-                  style={[
-                    styles.languageButtonText,
-                    isTurkish && styles.languageButtonTextActive,
-                  ]}
-                >
-                  {t('langSelector.turkish')}
-                </Text>
-              </TouchableOpacity>
+        {/* Personal Info Section */}
+        <Text style={styles.sectionTitle}>{t('profile.personalInfo')}</Text>
+        <View style={styles.card}>
+          <View style={styles.inputRow}>
+            <Text style={styles.inputLabel}>{t('profile.name')}</Text>
+            <TextInput
+              style={styles.textInput}
+              value={inputName}
+              onChangeText={setInputName}
+              onBlur={saveName}
+              onEndEditing={saveName}
+              placeholder={t('profile.nameInputPlaceholder')}
+              placeholderTextColor={Colors.textMuted}
+            />
+          </View>
 
-              <TouchableOpacity
-                style={[
-                  styles.languageButton,
-                  !isTurkish && styles.languageButtonActive,
-                ]}
-                onPress={() => changeLanguage('en')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.languageFlag}>🇬🇧</Text>
-                <Text
-                  style={[
-                    styles.languageButtonText,
-                    !isTurkish && styles.languageButtonTextActive,
-                  ]}
-                >
-                  {t('langSelector.english')}
-                </Text>
-              </TouchableOpacity>
+          <View style={styles.divider} />
+
+          <View style={styles.inputRow}>
+            <Text style={styles.inputLabel}>{t('profile.weightLabel')}</Text>
+            <View style={styles.weightInputContainer}>
+              <TextInput
+                style={[styles.textInput, styles.weightInput]}
+                value={inputWeight}
+                onChangeText={setInputWeight}
+                onBlur={saveWeight}
+                onEndEditing={saveWeight}
+                keyboardType="numeric"
+                placeholder={t('profile.weightInputPlaceholder')}
+                placeholderTextColor={Colors.textMuted}
+              />
+              <View style={styles.unitBadge}>
+                <Text style={styles.unitBadgeText}>{units}</Text>
+              </View>
             </View>
           </View>
         </View>
 
-        {/* Settings Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('profile.settings')}</Text>
-          <View style={styles.card}>
-            <SettingRow
-              icon="notifications-outline"
-              iconColor={Colors.warning}
-              title={t('profile.notifications')}
-              subtitle={t('profile.notificationsDesc')}
-              right={
-                <Switch
-                  value={true}
-                  trackColor={{ false: Colors.border, true: Colors.primaryDark }}
-                  thumbColor={Colors.textPrimary}
-                  ios_backgroundColor={Colors.border}
-                />
-              }
-            />
-            <View style={styles.settingDivider} />
-            <SettingRow
-              icon="moon-outline"
-              iconColor={Colors.secondary}
-              title={t('profile.darkMode')}
-              subtitle={t('profile.darkModeDesc')}
-              right={
-                <Switch
-                  value={true}
-                  trackColor={{ false: Colors.border, true: Colors.primaryDark }}
-                  thumbColor={Colors.textPrimary}
-                  ios_backgroundColor={Colors.border}
-                />
-              }
-            />
-            <View style={styles.settingDivider} />
-            <SettingRow
-              icon="scale-outline"
-              iconColor={Colors.primary}
-              title={t('profile.units')}
-              subtitle={t('profile.unitsDesc')}
-              right={
-                <View style={styles.unitBadge}>
-                  <Text style={styles.unitBadgeText}>kg</Text>
-                </View>
-              }
-            />
+        {/* Language Section */}
+        <Text style={styles.sectionTitle}>{t('langSelector.title')}</Text>
+        <View style={styles.card}>
+          <View style={styles.languageContainer}>
+            <TouchableOpacity 
+              style={[
+                styles.languageButton, 
+                locale === 'tr' && styles.languageButtonActive
+              ]}
+              onPress={() => changeLanguage('tr')}
+            >
+              <Text style={styles.languageEmoji}>🇹🇷</Text>
+              <Text style={[
+                styles.languageText,
+                locale === 'tr' && styles.languageTextActive
+              ]}>{t('langSelector.turkish')}</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[
+                styles.languageButton, 
+                locale === 'en' && styles.languageButtonActive
+              ]}
+              onPress={() => changeLanguage('en')}
+            >
+              <Text style={styles.languageEmoji}>🇬🇧</Text>
+              <Text style={[
+                styles.languageText,
+                locale === 'en' && styles.languageTextActive
+              ]}>{t('langSelector.english')}</Text>
+            </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Settings Section */}
+        <Text style={styles.sectionTitle}>{t('profile.settings')}</Text>
+        <View style={styles.card}>
+          <SettingRow
+            icon="notifications-outline"
+            title={t('profile.notifications')}
+            subtitle={t('profile.notificationsDesc')}
+            right={
+              <Switch
+                value={notifications}
+                onValueChange={toggleNotifications}
+                trackColor={{ false: Colors.border, true: Colors.primaryDark }}
+                thumbColor={notifications ? Colors.primary : Colors.textMuted}
+              />
+            }
+          />
+          <View style={styles.divider} />
+          <SettingRow
+            icon={darkMode ? "moon-outline" : "sunny-outline"}
+            title={darkMode ? t('profile.darkMode') : t('profile.lightMode')}
+            subtitle={darkMode ? t('profile.darkModeDesc') : t('profile.lightModeDesc')}
+            right={
+              <Switch
+                value={darkMode}
+                onValueChange={toggleDarkMode}
+                trackColor={{ false: Colors.border, true: Colors.primaryDark }}
+                thumbColor={darkMode ? Colors.primary : Colors.textMuted}
+              />
+            }
+          />
+          <View style={styles.divider} />
+          <SettingRow
+            icon="barbell-outline"
+            title={t('profile.units')}
+            subtitle={t('profile.unitsDesc')}
+            onPress={toggleUnits}
+            right={
+              <View style={styles.unitToggle}>
+                <Text style={styles.unitToggleText}>{units.toUpperCase()}</Text>
+                <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+              </View>
+            }
+          />
         </View>
 
         {/* About Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('profile.about')}</Text>
-          <View style={styles.card}>
-            <SettingRow
-              icon="information-circle-outline"
-              iconColor={Colors.textSecondary}
-              title={t('profile.appName')}
-              subtitle={`${t('profile.version')} 1.0.0`}
-              right={
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={Colors.textMuted}
-                />
-              }
-            />
-          </View>
+        <Text style={styles.sectionTitle}>{t('profile.about')}</Text>
+        <View style={styles.card}>
+          <SettingRow
+            icon="information-circle-outline"
+            title={t('profile.appName')}
+            right={<Text style={styles.versionText}>{t('profile.version')}</Text>}
+          />
         </View>
 
-        <View style={styles.bottomSpacer} />
+        <View style={styles.bottomPadding} />
       </ScrollView>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -180,7 +264,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 60,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingBottom: 20,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
@@ -188,25 +272,21 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: 'bold',
     color: Colors.textPrimary,
-    letterSpacing: -0.5,
-  },
-  scrollView: {
-    flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
+    padding: 20,
   },
-
-  // Avatar section
-  avatarSection: {
+  profileHeader: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 30,
   },
   avatarContainer: {
-    position: 'relative',
+    width: 100,
+    height: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
   },
   avatarGlow: {
@@ -215,136 +295,172 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     backgroundColor: Colors.primaryGlow,
-    top: -5,
-    left: -5,
+    transform: [{ scale: 1.2 }],
   },
   avatar: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: Colors.surfaceLight,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: Colors.primary,
   },
-  avatarName: {
-    fontSize: 20,
-    fontWeight: '600',
+  userName: {
+    fontSize: 24,
+    fontWeight: 'bold',
     color: Colors.textPrimary,
+    marginBottom: 4,
   },
-  avatarEmail: {
-    fontSize: 14,
+  userStats: {
+    fontSize: 16,
     color: Colors.textSecondary,
-    marginTop: 4,
-  },
-
-  // Section
-  section: {
-    marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '600',
     color: Colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 10,
+    marginBottom: 12,
+    marginTop: 8,
     marginLeft: 4,
   },
-
-  // Card
   card: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden',
   },
-
-  // Language toggle
-  languageToggleContainer: {
+  inputRow: {
     flexDirection: 'row',
-    padding: 6,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  inputLabel: {
+    fontSize: 16,
+    color: Colors.textPrimary,
+    flex: 1,
+  },
+  textInput: {
+    backgroundColor: Colors.surfaceLight,
+    color: Colors.textPrimary,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 16,
+    flex: 2,
+  },
+  weightInputContainer: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  weightInput: {
+    flex: 1,
+  },
+  unitBadge: {
+    backgroundColor: Colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  unitBadgeText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 12,
+  },
+  languageContainer: {
+    flexDirection: 'row',
+    gap: 12,
   },
   languageButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
+    padding: 12,
     borderRadius: 12,
-    gap: 8,
+    backgroundColor: Colors.surfaceLight,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
   },
   languageButtonActive: {
     backgroundColor: Colors.primaryGlow,
-    borderWidth: 1,
-    borderColor: Colors.primary + '40',
+    borderColor: Colors.primary,
   },
-  languageFlag: {
+  languageEmoji: {
     fontSize: 20,
+    marginRight: 8,
   },
-  languageButtonText: {
-    fontSize: 15,
+  languageText: {
+    fontSize: 16,
     fontWeight: '500',
-    color: Colors.textMuted,
+    color: Colors.textSecondary,
   },
-  languageButtonTextActive: {
+  languageTextActive: {
     color: Colors.primary,
     fontWeight: '600',
   },
-
-  // Setting rows
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 8,
   },
-  settingIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  settingIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.surfaceLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
+    marginRight: 16,
   },
   settingTextContainer: {
     flex: 1,
   },
   settingTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '500',
     color: Colors.textPrimary,
+    marginBottom: 4,
   },
   settingSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: Colors.textSecondary,
-    marginTop: 2,
   },
   settingRight: {
-    marginLeft: 12,
+    marginLeft: 16,
   },
-  settingDivider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginLeft: 66,
-  },
-
-  // Unit badge
-  unitBadge: {
-    backgroundColor: Colors.primaryGlow,
+  unitToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceLight,
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
-  unitBadgeText: {
-    color: Colors.primary,
-    fontSize: 13,
+  unitToggleText: {
+    color: Colors.textPrimary,
+    fontSize: 14,
     fontWeight: '600',
+    marginRight: 4,
   },
-
-  bottomSpacer: {
+  versionText: {
+    color: Colors.textMuted,
+    fontSize: 14,
+  },
+  bottomPadding: {
     height: 40,
   },
 });
+
+export default ProfileScreen;
