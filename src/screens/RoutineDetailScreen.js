@@ -1,17 +1,70 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../theme/colors';
 import { useLanguage } from '../context/LanguageContext';
 
+const DAYS_OF_WEEK = [
+  { id: 'monday', key: 'routines.days.monday' },
+  { id: 'tuesday', key: 'routines.days.tuesday' },
+  { id: 'wednesday', key: 'routines.days.wednesday' },
+  { id: 'thursday', key: 'routines.days.thursday' },
+  { id: 'friday', key: 'routines.days.friday' },
+  { id: 'saturday', key: 'routines.days.saturday' },
+  { id: 'sunday', key: 'routines.days.sunday' },
+];
+
 export default function RoutineDetailScreen({ route, navigation }) {
   const { t } = useLanguage();
-  const { programName } = route.params || { programName: 'Program Detayı' };
+  const { programId, programName } = route.params || { programId: 'default', programName: 'Program Detayı' };
+
+  // State to hold saved titles per day
+  const [dayTitles, setDayTitles] = useState({});
+
+  // Fetch saved titles every time this screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      const loadDayTitles = async () => {
+        try {
+          const titlesMap = {};
+          for (const day of DAYS_OF_WEEK) {
+            const dayNameTranslated = t(day.key);
+            const key = `@program_${programId}_${dayNameTranslated}`;
+            const savedData = await AsyncStorage.getItem(key);
+            if (savedData) {
+              const parsed = JSON.parse(savedData);
+              if (parsed && parsed.dayTitle && parsed.dayTitle.trim() !== '') {
+                titlesMap[day.id] = parsed.dayTitle;
+              }
+            }
+          }
+          setDayTitles(titlesMap);
+        } catch (error) {
+          console.warn('Gün başlıkları yüklenirken hata:', error);
+        }
+      };
+
+      loadDayTitles();
+    }, [programId, t])
+  );
+
+  const handleDayPress = (day) => {
+    const dayNameTranslated = t(day.key);
+    navigation.navigate('DayDetail', {
+      programId,
+      programName,
+      dayId: day.id,
+      dayName: dayNameTranslated,
+    });
+  };
 
   return (
     <View style={styles.container}>
@@ -30,27 +83,58 @@ export default function RoutineDetailScreen({ route, navigation }) {
         <View style={styles.headerRightPlaceholder} />
       </View>
 
-      {/* Empty State Content */}
-      <View style={styles.content}>
-        <View style={styles.iconContainer}>
-          <View style={styles.iconGlow} />
-          <Ionicons name="barbell-outline" size={60} color={Colors.primary} />
-        </View>
-        <Text style={styles.emptyStateText}>
-          {t('routines.emptyStateText')}
-        </Text>
-      </View>
-
-      {/* FAB - Add Exercise Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        activeOpacity={0.8}
-        onPress={() => console.log('Yeni hareket ekleme butonu tıklandı')}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.fabGlow} />
-        <Ionicons name="add" size={28} color={Colors.background} />
-        <Text style={styles.fabText}>{t('routines.addExercise')}</Text>
-      </TouchableOpacity>
+        <Text style={styles.sectionTitle}>{t('routines.days.weeklySchedule')}</Text>
+
+        {DAYS_OF_WEEK.map((day) => {
+          const dayNameText = t(day.key);
+          const plannedTitle = dayTitles[day.id];
+          const isPlanned = Boolean(plannedTitle);
+
+          return (
+            <TouchableOpacity
+              key={day.id}
+              style={styles.dayCard}
+              activeOpacity={0.7}
+              onPress={() => handleDayPress(day)}
+            >
+              <View style={styles.dayCardLeft}>
+                <View
+                  style={[
+                    styles.dayIconContainer,
+                    isPlanned && styles.dayIconContainerActive,
+                  ]}
+                >
+                  <Ionicons
+                    name="calendar-outline"
+                    size={22}
+                    color={isPlanned ? Colors.primary : Colors.textMuted}
+                  />
+                </View>
+                <View style={styles.dayInfo}>
+                  <Text style={styles.dayName}>{dayNameText}</Text>
+                  <Text
+                    style={[
+                      styles.daySubTitle,
+                      isPlanned && styles.daySubTitleActive,
+                    ]}
+                  >
+                    {isPlanned ? plannedTitle : t('routines.days.notPlanned')}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.chevronContainer}>
+                <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
@@ -92,68 +176,75 @@ const styles = StyleSheet.create({
   headerRightPlaceholder: {
     width: 40,
   },
-  content: {
+  scrollView: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
   },
-  iconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: Colors.primaryGlow,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-    position: 'relative',
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
   },
-  iconGlow: {
-    position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: Colors.primaryGlow,
-    opacity: 0.4,
-  },
-  emptyStateText: {
-    fontSize: 16,
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
     color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 24,
-    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 16,
+    marginLeft: 4,
   },
-  fab: {
-    position: 'absolute',
-    bottom: 40,
-    right: 20,
+  dayCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    gap: 8,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+    justifyContent: 'space-between',
   },
-  fabGlow: {
-    position: 'absolute',
-    top: -6,
-    left: -6,
-    right: -6,
-    bottom: -6,
-    borderRadius: 22,
-    backgroundColor: Colors.primary,
-    opacity: 0.12,
+  dayCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
   },
-  fabText: {
-    color: Colors.background,
-    fontSize: 15,
+  dayIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayIconContainerActive: {
+    backgroundColor: Colors.primaryGlow,
+  },
+  dayInfo: {
+    flex: 1,
+  },
+  dayName: {
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.2,
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  daySubTitle: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    fontWeight: '500',
+  },
+  daySubTitleActive: {
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  chevronContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Colors.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
