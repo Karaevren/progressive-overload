@@ -19,6 +19,7 @@ export default function AnalyticsScreen() {
   const [activeTab, setActiveTab] = useState('performance');
   const [consistencyStats, setConsistencyStats] = useState({ target: 0, completed: 0, percentage: 0, diff: 0 });
   const [heatmapData, setHeatmapData] = useState([]);
+  const [selectedDayInfo, setSelectedDayInfo] = useState(null);
   
   const timeRanges = ['Son 1 Ay', 'Son 3 Ay', 'Son 6 Ay', 'Tümü'];
 
@@ -95,7 +96,7 @@ export default function AnalyticsScreen() {
             diff
           });
           
-          // --- HEATMAP (SON 100 GÜN) HESAPLAMASI ---
+          // --- HEATMAP (GITHUB STYLE WEEKS MATRİSİ) HESAPLAMASI ---
           const historyDateMap = {};
           parsed.forEach(record => {
             if (record.date) {
@@ -109,29 +110,49 @@ export default function AnalyticsScreen() {
             }
           });
 
-          const tempHeatmap = [];
-          for (let i = 99; i >= 0; i--) {
-            const d = new Date(now);
-            d.setDate(d.getDate() - i);
+          const WEEKS = 18;
+          const today = new Date();
+          const todayDay = today.getDay() === 0 ? 7 : today.getDay(); // 1: Pzt, 7: Paz
+          const totalDays = (WEEKS - 1) * 7 + todayDay;
+          
+          const startDate = new Date(today);
+          startDate.setDate(today.getDate() - totalDays + 1);
+
+          const weeksArray = [];
+          let currentWeek = [];
+          
+          for (let i = 0; i < totalDays; i++) {
+            const d = new Date(startDate);
+            d.setDate(startDate.getDate() + i);
             const dateStr = d.toISOString().split('T')[0];
             const exCount = historyDateMap[dateStr] || 0;
             
             let intensity = 0;
             if (exCount > 0) {
               if (exCount <= 2) intensity = 1;
-              else if (exCount <= 5) intensity = 2;
-              else intensity = 3;
+              else if (exCount <= 4) intensity = 2;
+              else if (exCount <= 6) intensity = 3;
+              else intensity = 4;
             }
             
-            tempHeatmap.push({
+            currentWeek.push({
+              dateObj: d,
               dateStr,
               isActive: exCount > 0,
               intensity,
               exercisesCount: exCount
             });
+            
+            if (currentWeek.length === 7) {
+              weeksArray.push(currentWeek);
+              currentWeek = [];
+            }
+          }
+          if (currentWeek.length > 0) {
+              weeksArray.push(currentWeek);
           }
           
-          setHeatmapData(tempHeatmap);
+          setHeatmapData(weeksArray);
         }
       }
     } catch (error) {
@@ -460,37 +481,99 @@ export default function AnalyticsScreen() {
           </View>
           
           <Text style={[styles.consistencyTitle, { marginTop: 24 }]}>Antrenman Günlüğü</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heatmapScroll}>
-            <View style={styles.heatmapContainer}>
-              {heatmapData.map((day, index) => {
-                const getHeatmapColor = (intensity) => {
-                  if (intensity === 0) return Colors.surfaceLight;
-                  if (intensity === 1) return 'rgba(0, 229, 160, 0.3)';
-                  if (intensity === 2) return 'rgba(0, 229, 160, 0.6)';
-                  return 'rgba(0, 229, 160, 1.0)';
-                };
-                
-                const handleHeatmapPress = () => {
-                  const dateObj = new Date(day.dateStr);
-                  const formattedDate = `${dateObj.getDate()} ${['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'][dateObj.getMonth()]}`;
-                  if (day.isActive) {
-                    Alert.alert('Antrenman Günü', `${formattedDate} tarihinde ${day.exercisesCount} hareket tamamlandı.`);
-                  } else {
-                    Alert.alert('Dinlenme Günü', `${formattedDate} tarihinde antrenman yapılmadı.`);
-                  }
-                };
-
-                return (
-                  <TouchableOpacity 
-                    key={index} 
-                    style={[styles.heatmapSquare, { backgroundColor: getHeatmapColor(day.intensity) }]}
-                    onPress={handleHeatmapPress}
-                    activeOpacity={0.7}
-                  />
-                );
-              })}
+          <View style={styles.heatmapWrapper}>
+            {/* Y-Axis */}
+            <View style={styles.heatmapYAxis}>
+              <Text style={[styles.heatmapYAxisText, { top: 0 }]}>Pzt</Text>
+              <Text style={[styles.heatmapYAxisText, { top: 32 }]}>Çar</Text>
+              <Text style={[styles.heatmapYAxisText, { top: 64 }]}>Cum</Text>
             </View>
-          </ScrollView>
+
+            {/* Scrollable Matrix */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heatmapScroll}>
+              <View style={{ flexDirection: 'column' }}>
+                {/* X-Axis (Months) */}
+                <View style={styles.heatmapXAxis}>
+                  {heatmapData.map((week, index) => {
+                    const isNewMonth = index === 0 || week[0].dateObj.getMonth() !== heatmapData[index - 1][0].dateObj.getMonth();
+                    return (
+                      <View key={`month-${index}`} style={styles.heatmapMonthCell}>
+                        {isNewMonth && (
+                          <Text style={styles.heatmapMonthText}>
+                            {['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'][week[0].dateObj.getMonth()]}
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+
+                {/* Grid Columns */}
+                <View style={{ flexDirection: 'row' }}>
+                  {heatmapData.map((week, wIndex) => (
+                    <View key={`week-${wIndex}`} style={{ flexDirection: 'column', marginRight: 4 }}>
+                      {week.map((day, dIndex) => {
+                        const getHeatmapColor = (intensity) => {
+                          if (intensity === 0) return Colors.surfaceLight;
+                          if (intensity === 1) return '#0e4429';
+                          if (intensity === 2) return '#006d32';
+                          if (intensity === 3) return '#26a641';
+                          return '#39d353';
+                        };
+                        
+                        const handleHeatmapPress = () => {
+                          const dateObj = new Date(day.dateStr);
+                          const formattedDate = `${dateObj.getDate()} ${['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'][dateObj.getMonth()]}`;
+                          setSelectedDayInfo({
+                            date: formattedDate,
+                            count: day.exercisesCount
+                          });
+                        };
+
+                        return (
+                          <TouchableOpacity 
+                            key={`day-${dIndex}`} 
+                            style={[styles.heatmapSquare, { backgroundColor: getHeatmapColor(day.intensity) }]}
+                            onPress={handleHeatmapPress}
+                            activeOpacity={0.7}
+                          />
+                        );
+                      })}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+          
+          {/* Tooltip & Legend */}
+          <View style={styles.heatmapFooter}>
+            <View style={styles.tooltipContainer}>
+              {selectedDayInfo ? (
+                <Text style={styles.tooltipText}>
+                  {selectedDayInfo.date}: <Text style={{fontWeight: '700', color: Colors.textPrimary}}>{selectedDayInfo.count > 0 ? `${selectedDayInfo.count} egzersiz tamamlandı` : 'Antrenman Yok'}</Text>
+                </Text>
+              ) : (
+                <Text style={styles.tooltipPlaceholder}>Detay görmek için bir güne tıklayın.</Text>
+              )}
+            </View>
+
+            <View style={styles.heatmapLegend}>
+              <Text style={styles.legendText}>Daha Az</Text>
+              {[0, 1, 2, 3, 4].map(level => {
+                 const getHeatmapColor = (intensity) => {
+                   if (intensity === 0) return Colors.surfaceLight;
+                   if (intensity === 1) return '#0e4429';
+                   if (intensity === 2) return '#006d32';
+                   if (intensity === 3) return '#26a641';
+                   return '#39d353';
+                 };
+                 return <View key={`leg-${level}`} style={[styles.heatmapSquare, { backgroundColor: getHeatmapColor(level), marginHorizontal: 2 }]} />;
+              })}
+              <Text style={styles.legendText}>Daha Çok</Text>
+            </View>
+          </View>
+
           <View style={{height: 40}} />
         </ScrollView>
       )}
@@ -774,19 +857,81 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     letterSpacing: -0.5,
   },
-  heatmapScroll: {
-    paddingVertical: 10,
+  heatmapWrapper: {
+    flexDirection: 'row',
+    marginTop: 8,
+    backgroundColor: Colors.surface,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  heatmapContainer: {
-    height: 115, 
-    flexDirection: 'column',
-    flexWrap: 'wrap',
-    alignContent: 'flex-start',
+  heatmapYAxis: {
+    width: 28,
+    marginTop: 22, // X-Axis için boşluk
+    position: 'relative',
+  },
+  heatmapYAxisText: {
+    position: 'absolute',
+    fontSize: 10,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+    height: 12,
+    lineHeight: 12,
+  },
+  heatmapScroll: {
+    paddingRight: 16,
+  },
+  heatmapXAxis: {
+    flexDirection: 'row',
+    height: 18,
+    marginBottom: 4,
+  },
+  heatmapMonthCell: {
+    width: 14,
+    marginRight: 4,
+    overflow: 'visible',
+  },
+  heatmapMonthText: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+    width: 40,
+    overflow: 'visible',
   },
   heatmapSquare: {
-    width: 12,
-    height: 12,
+    width: 14,
+    height: 14,
     borderRadius: 3,
-    margin: 2,
+    marginBottom: 4,
+  },
+  heatmapFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingHorizontal: 4,
+  },
+  tooltipContainer: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  tooltipText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  tooltipPlaceholder: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    fontStyle: 'italic',
+  },
+  heatmapLegend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendText: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    marginHorizontal: 4,
   },
 });

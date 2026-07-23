@@ -37,10 +37,15 @@ const ProfileScreen = () => {
   } = useSettings();
 
   const [userName, setUserName] = useState('Ahmet Karaevren');
-  const [userWeight, setUserWeight] = useState(77); // Stored in kg
-
+  const [profileData, setProfileData] = useState({ height: '' });
+  const [userWeight, setUserWeight] = useState(77);
+  const [userGoal, setUserGoal] = useState({ name: 'Denizli Lykos Yarı Maratonu', date: '2026-10-25' });
   const [inputName, setInputName] = useState('');
   const [inputWeight, setInputWeight] = useState('');
+
+  const [isGoalModalVisible, setIsGoalModalVisible] = useState(false);
+  const [goalInputName, setGoalInputName] = useState('');
+  const [goalInputDate, setGoalInputDate] = useState('');
 
   useEffect(() => {
     loadProfileData();
@@ -62,13 +67,21 @@ const ProfileScreen = () => {
   const loadProfileData = async () => {
     try {
       const storedName = await AsyncStorage.getItem('@profile_name');
-      const storedWeight = await AsyncStorage.getItem('@profile_weight');
+      const storedProfile = await AsyncStorage.getItem('@userProfile');
+      const storedGoal = await AsyncStorage.getItem('@userGoal');
       
       if (storedName) {
         setUserName(storedName);
       }
-      if (storedWeight) {
-        setUserWeight(parseFloat(storedWeight));
+      if (storedProfile) {
+        const parsed = JSON.parse(storedProfile);
+        setProfileData({ height: parsed.height || '' });
+        if (parsed.weight) {
+          setUserWeight(parseFloat(parsed.weight));
+        }
+      }
+      if (storedGoal) {
+        setUserGoal(JSON.parse(storedGoal));
       }
     } catch (e) {
       console.error('Failed to load profile data', e);
@@ -86,7 +99,7 @@ const ProfileScreen = () => {
     }
   };
 
-  const saveWeight = async () => {
+  const saveProfileSettings = async () => {
     try {
       let weightVal = parseFloat(inputWeight);
       if (isNaN(weightVal) || weightVal <= 0) {
@@ -97,11 +110,78 @@ const ProfileScreen = () => {
         }
       }
       setUserWeight(weightVal);
-      await AsyncStorage.setItem('@profile_weight', weightVal.toString());
+
+      await AsyncStorage.setItem('@userProfile', JSON.stringify({
+        height: profileData.height,
+        weight: weightVal.toString()
+      }));
       Keyboard.dismiss();
+      import('react-native').then(({ Alert }) => {
+        Alert.alert('Başarılı', 'Fiziksel verileriniz kaydedildi!');
+      });
     } catch (e) {
-      console.error('Failed to save weight', e);
+      console.error('Failed to save profile', e);
     }
+  };
+
+  const handleResetData = () => {
+    import('react-native').then(({ Alert }) => {
+      Alert.alert(
+        'Emin misiniz?',
+        'Tüm antrenman geçmişin ve programların kalıcı olarak silinecek!',
+        [
+          { text: 'İptal', style: 'cancel' },
+          { 
+            text: 'Evet, Sıfırla', 
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await AsyncStorage.clear();
+                // State'leri boşalt/sıfırla
+                setProfileData({ height: '' });
+                setUserWeight(77);
+                setUserName('Ahmet Karaevren');
+                setInputName('Ahmet Karaevren');
+                setUserGoal({ name: 'Hedef Belirlenmedi', date: '2026-10-25' });
+                
+                Alert.alert('Başarılı', 'Tüm veriler silindi. Lütfen değişikliklerin tam yansıması için uygulamayı kapatıp yeniden açın.');
+              } catch (e) {
+                console.error('Clear error', e);
+              }
+            }
+          }
+        ]
+      );
+    });
+  };
+
+  const saveGoal = async () => {
+    try {
+      const updatedGoal = {
+        name: goalInputName.trim() || 'Hedef Belirlenmedi',
+        date: goalInputDate.trim() || '2026-10-25'
+      };
+      setUserGoal(updatedGoal);
+      await AsyncStorage.setItem('@userGoal', JSON.stringify(updatedGoal));
+      setIsGoalModalVisible(false);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const getDaysLeft = () => {
+    const goalDate = new Date(userGoal.date + 'T00:00:00');
+    if (isNaN(goalDate.getTime())) return 0;
+    const today = new Date();
+    const diffTime = goalDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
+
+  const handleComingSoon = () => {
+    import('react-native').then(({ Alert }) => {
+      Alert.alert('Yakında', 'Bu özellik bir sonraki sürümde eklenecektir.');
+    });
   };
 
   return (
@@ -121,38 +201,64 @@ const ProfileScreen = () => {
             </View>
           </View>
           <Text style={styles.userName}>{userName}</Text>
-          <Text style={styles.userStats}>{formatWeight(userWeight)}</Text>
+          <Text style={styles.userStats}>Boy: {profileData.height || '180'} cm • Kilo: {formatWeight ? formatWeight(userWeight) : `${userWeight} kg`}</Text>
         </View>
 
-        {/* Personal Info Section */}
-        <Text style={styles.sectionTitle}>{t('profile.personalInfo')}</Text>
+        {/* Big Goal Card (Geri Sayım) */}
+        <View style={styles.goalCard}>
+          <View style={styles.goalHeaderRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="trophy" size={24} color="#FFB84D" />
+              <Text style={styles.goalTitle}>Sıradaki Büyük Hedef</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.goalEditButton} 
+              onPress={() => {
+                setGoalInputName(userGoal.name);
+                setGoalInputDate(userGoal.date);
+                setIsGoalModalVisible(true);
+              }}
+            >
+              <Ionicons name="pencil" size={18} color="#FFB84D" />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.goalSubtitle}>{userGoal.name}</Text>
+          <View style={styles.goalCountdownBox}>
+            <Text style={styles.goalCountdownText}>Kalan Süre: <Text style={{fontWeight: '800'}}>{getDaysLeft()} Gün</Text></Text>
+          </View>
+        </View>
+
+        {/* Physical Data Section */}
+        <Text style={styles.sectionTitle}>Fiziksel Veriler</Text>
         <View style={styles.card}>
           <View style={styles.inputRow}>
-            <Text style={styles.inputLabel}>{t('profile.name')}</Text>
-            <TextInput
-              style={styles.textInput}
-              value={inputName}
-              onChangeText={setInputName}
-              onBlur={saveName}
-              onEndEditing={saveName}
-              placeholder={t('profile.nameInputPlaceholder')}
-              placeholderTextColor={Colors.textMuted}
-            />
+            <Text style={styles.inputLabel}>Boy</Text>
+            <View style={styles.weightInputContainer}>
+              <TextInput
+                style={[styles.textInput, styles.weightInput]}
+                value={profileData.height}
+                onChangeText={(text) => setProfileData({...profileData, height: text})}
+                keyboardType="numeric"
+                placeholder="180"
+                placeholderTextColor={Colors.textMuted}
+              />
+              <View style={styles.unitBadge}>
+                <Text style={styles.unitBadgeText}>cm</Text>
+              </View>
+            </View>
           </View>
 
           <View style={styles.divider} />
 
           <View style={styles.inputRow}>
-            <Text style={styles.inputLabel}>{t('profile.weightLabel')}</Text>
+            <Text style={styles.inputLabel}>Kilo</Text>
             <View style={styles.weightInputContainer}>
               <TextInput
                 style={[styles.textInput, styles.weightInput]}
                 value={inputWeight}
                 onChangeText={setInputWeight}
-                onBlur={saveWeight}
-                onEndEditing={saveWeight}
                 keyboardType="numeric"
-                placeholder={t('profile.weightInputPlaceholder')}
+                placeholder="77"
                 placeholderTextColor={Colors.textMuted}
               />
               <View style={styles.unitBadge}>
@@ -160,6 +266,10 @@ const ProfileScreen = () => {
               </View>
             </View>
           </View>
+
+          <TouchableOpacity style={styles.updateButton} onPress={saveProfileSettings} activeOpacity={0.8}>
+            <Text style={styles.updateButtonText}>Güncelle</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Language Section */}
@@ -203,10 +313,11 @@ const ProfileScreen = () => {
             icon="notifications-outline"
             title={t('profile.notifications')}
             subtitle={t('profile.notificationsDesc')}
+            onPress={handleComingSoon}
             right={
               <Switch
                 value={notifications}
-                onValueChange={toggleNotifications}
+                onValueChange={handleComingSoon}
                 trackColor={{ false: Colors.border, true: Colors.primaryDark }}
                 thumbColor={notifications ? Colors.primary : Colors.textMuted}
               />
@@ -217,10 +328,11 @@ const ProfileScreen = () => {
             icon={darkMode ? "moon-outline" : "sunny-outline"}
             title={darkMode ? t('profile.darkMode') : t('profile.lightMode')}
             subtitle={darkMode ? t('profile.darkModeDesc') : t('profile.lightModeDesc')}
+            onPress={handleComingSoon}
             right={
               <Switch
                 value={darkMode}
-                onValueChange={toggleDarkMode}
+                onValueChange={handleComingSoon}
                 trackColor={{ false: Colors.border, true: Colors.primaryDark }}
                 thumbColor={darkMode ? Colors.primary : Colors.textMuted}
               />
@@ -251,8 +363,56 @@ const ProfileScreen = () => {
           />
         </View>
 
+        {/* Danger Zone */}
+        <Text style={[styles.sectionTitle, { color: Colors.error }]}>Veri Yönetimi</Text>
+        <TouchableOpacity 
+          style={styles.dangerButton} 
+          onPress={handleResetData}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="warning-outline" size={20} color={Colors.background} style={{ marginRight: 8 }} />
+          <Text style={styles.dangerButtonText}>Tüm Verileri Sıfırla</Text>
+        </TouchableOpacity>
+
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* Goal Edit Modal */}
+      {isGoalModalVisible && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Hedefi Düzenle</Text>
+            <View style={styles.inputRow}>
+              <Text style={styles.inputLabel}>Hedef Adı</Text>
+              <TextInput
+                style={styles.textInput}
+                value={goalInputName}
+                onChangeText={setGoalInputName}
+                placeholder="Örn: Yarı Maraton"
+                placeholderTextColor={Colors.textMuted}
+              />
+            </View>
+            <View style={styles.inputRow}>
+              <Text style={styles.inputLabel}>Hedef Tarihi</Text>
+              <TextInput
+                style={styles.textInput}
+                value={goalInputDate}
+                onChangeText={setGoalInputDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={Colors.textMuted}
+              />
+            </View>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancelButton} onPress={() => setIsGoalModalVisible(false)}>
+                <Text style={styles.modalCancelText}>İptal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveButton} onPress={saveGoal}>
+                <Text style={styles.modalSaveText}>Kaydet</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -460,6 +620,142 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+  goalCard: {
+    backgroundColor: 'rgba(255, 184, 77, 0.1)',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#FFB84D',
+    shadowColor: '#FFB84D',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  goalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  goalTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFB84D',
+    marginLeft: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  goalEditButton: {
+    padding: 4,
+  },
+  goalSubtitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    marginBottom: 16,
+  },
+  goalCountdownBox: {
+    backgroundColor: Colors.surface,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+  },
+  goalCountdownText: {
+    fontSize: 20,
+    color: Colors.textPrimary,
+  },
+  updateButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  updateButtonText: {
+    color: Colors.background,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  dangerButton: {
+    flexDirection: 'row',
+    backgroundColor: Colors.error,
+    paddingVertical: 16,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: Colors.error,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  dangerButtonText: {
+    color: Colors.background,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  modalContent: {
+    backgroundColor: Colors.surface,
+    padding: 24,
+    borderRadius: 16,
+    width: '85%',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  modalCancelButton: {
+    flex: 1,
+    backgroundColor: Colors.surfaceLight,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginRight: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  modalSaveButton: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginLeft: 8,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: Colors.textSecondary,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  modalSaveText: {
+    color: Colors.background,
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
 
