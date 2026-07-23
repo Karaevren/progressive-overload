@@ -11,10 +11,6 @@ import { Colors } from './src/theme/colors';
 function AppContent() {
   const { isReady } = useLanguage();
 
-  useEffect(() => {
-    // GEÇİCİ TEMİZLİK KODU: Test verilerini silmek için 1 kez çalışacak
-    AsyncStorage.clear().then(() => console.log('Tüm test verileri temizlendi.'));
-  }, []);
 
   if (!isReady) {
     return (

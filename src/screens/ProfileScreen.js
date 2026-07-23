@@ -39,7 +39,7 @@ const ProfileScreen = () => {
   } = useSettings();
 
   const [userName, setUserName] = useState('');
-  const [profileData, setProfileData] = useState({ height: '' });
+  const [userHeight, setUserHeight] = useState('');
   const [userWeight, setUserWeight] = useState(77);
   const [userGoal, setUserGoal] = useState({ name: 'Hedef Belirlenmedi', date: '' });
   const [inputWeight, setInputWeight] = useState('');
@@ -55,7 +55,9 @@ const ProfileScreen = () => {
   }, []);
 
   useEffect(() => {
-    if (units === 'lb') {
+    if (userWeight === 0) {
+      setInputWeight('');
+    } else if (units === 'lb') {
       setInputWeight(Math.round(userWeight * 2.20462).toString());
     } else {
       setInputWeight(userWeight.toString());
@@ -65,6 +67,8 @@ const ProfileScreen = () => {
   const loadProfileData = async () => {
     try {
       const storedName = await AsyncStorage.getItem('@userName');
+      const storedHeight = await AsyncStorage.getItem('@userHeight');
+      const storedWeight = await AsyncStorage.getItem('@userWeight');
       const storedProfile = await AsyncStorage.getItem('@userProfile');
       const storedGoal = await AsyncStorage.getItem('@userGoal');
       const storedNotif = await AsyncStorage.getItem('@notifications_enabled');
@@ -72,11 +76,21 @@ const ProfileScreen = () => {
       if (storedName) setUserName(storedName);
       if (storedNotif) setLocalNotifications(storedNotif === 'true');
       
-      if (storedProfile) {
+      // Önce ayrı key'lerden oku, yoksa eski @userProfile'dan oku (geriye uyumluluk)
+      if (storedHeight) {
+        setUserHeight(storedHeight);
+      } else if (storedProfile) {
         const parsed = JSON.parse(storedProfile);
-        setProfileData({ height: parsed.height || '' });
+        if (parsed.height) setUserHeight(parsed.height);
+      }
+      
+      if (storedWeight) {
+        setUserWeight(parseFloat(storedWeight));
+      } else if (storedProfile) {
+        const parsed = JSON.parse(storedProfile);
         if (parsed.weight) setUserWeight(parseFloat(parsed.weight));
       }
+      
       if (storedGoal) setUserGoal(JSON.parse(storedGoal));
     } catch (e) {
       console.error('Failed to load profile data', e);
@@ -85,12 +99,25 @@ const ProfileScreen = () => {
 
   const saveProfileSettings = async () => {
     try {
-      let weightVal = parseFloat(inputWeight);
-      if (isNaN(weightVal) || weightVal <= 0) weightVal = userWeight;
-      else if (units === 'lb') weightVal = weightVal / 2.20462;
+      // Kilo: Boş bırakılmışsa 0 olarak kaydet, eski değere dönme
+      let weightVal;
+      const trimmedWeight = inputWeight.trim();
+      if (trimmedWeight === '') {
+        weightVal = 0;
+      } else {
+        weightVal = parseFloat(trimmedWeight);
+        if (isNaN(weightVal) || weightVal < 0) weightVal = 0;
+        else if (units === 'lb') weightVal = weightVal / 2.20462;
+      }
       
       setUserWeight(weightVal);
-      await AsyncStorage.setItem('@userProfile', JSON.stringify({ height: profileData.height, weight: weightVal.toString() }));
+      
+      // Boy: Boş bırakılmışsa boş string olarak kaydet
+      const heightToSave = userHeight.trim();
+      
+      await AsyncStorage.setItem('@userHeight', heightToSave);
+      await AsyncStorage.setItem('@userWeight', weightVal > 0 ? weightVal.toString() : '');
+      await AsyncStorage.setItem('@userProfile', JSON.stringify({ height: heightToSave, weight: weightVal > 0 ? weightVal.toString() : '' }));
       await AsyncStorage.setItem('@userName', userName.trim());
       Keyboard.dismiss();
       Alert.alert('Başarılı', 'Fiziksel verileriniz ve isminiz kaydedildi!');
@@ -125,21 +152,37 @@ const ProfileScreen = () => {
 
   const handleToggleNotifications = async (value) => {
     if (value) {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('İzin Reddedildi', 'Bildirim gönderebilmek için ayarlardan izin vermelisiniz.');
-        return;
+      try {
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('İzin Reddedildi', 'Bildirim gönderebilmek için ayarlardan izin vermelisiniz.');
+          setLocalNotifications(false);
+          return;
+        }
+        await Notifications.scheduleNotificationAsync({
+          content: { title: "Antrenman Vakti! 🏋️‍♂️", body: "Bugün hedeflerine bir adım daha yaklaş." },
+          trigger: { type: 'daily', hour: 9, minute: 0 },
+        });
+        await AsyncStorage.setItem('@notifications_enabled', 'true');
+        setLocalNotifications(true);
+      } catch (err) {
+        console.warn('Bildirim zamanlama hatası:', err);
+        try {
+          await Notifications.scheduleNotificationAsync({
+            content: { title: "Antrenman Vakti! 🏋️‍♂️", body: "Bugün hedeflerine bir adım daha yaklaş." },
+            trigger: { seconds: 60 * 60 * 24, repeats: true },
+          });
+        } catch (_) {}
+        await AsyncStorage.setItem('@notifications_enabled', 'true');
+        setLocalNotifications(true);
       }
-      await Notifications.scheduleNotificationAsync({
-        content: { title: "Antrenman Vakti! 🏋️‍♂️", body: "Bugün hedeflerine bir adım daha yaklaş." },
-        trigger: { hour: 9, minute: 0, repeats: true },
-      });
-      await AsyncStorage.setItem('@notifications_enabled', 'true');
-      setLocalNotifications(true);
     } else {
-      await Notifications.cancelAllScheduledNotificationsAsync();
-      await AsyncStorage.setItem('@notifications_enabled', 'false');
+      // Kapatma: Doğrudan state güncelle, OS izin kontrolü yapma
       setLocalNotifications(false);
+      await AsyncStorage.setItem('@notifications_enabled', 'false');
+      try {
+        await Notifications.cancelAllScheduledNotificationsAsync();
+      } catch (_) {}
     }
   };
 
@@ -176,7 +219,7 @@ const ProfileScreen = () => {
             placeholderTextColor={Colors.textMuted}
             onEndEditing={saveProfileSettings}
           />
-          <Text style={[styles.userStats, { color: themeStyles.textSec }]}>Boy: {profileData.height || '180'} cm • Kilo: {formatWeight ? formatWeight(userWeight) : `${userWeight} kg`}</Text>
+          <Text style={[styles.userStats, { color: themeStyles.textSec }]}>Boy: {userHeight || '-'} cm • Kilo: {formatWeight ? formatWeight(userWeight) : `${userWeight} kg`}</Text>
         </View>
 
         {/* Big Goal Card (Geri Sayım) */}
@@ -211,8 +254,8 @@ const ProfileScreen = () => {
             <View style={styles.weightInputContainer}>
               <TextInput
                 style={[styles.textInput, styles.weightInput, { backgroundColor: themeStyles.inputBg, color: themeStyles.text }]}
-                value={profileData.height}
-                onChangeText={(text) => setProfileData({...profileData, height: text})}
+                value={userHeight}
+                onChangeText={setUserHeight}
                 keyboardType="numeric"
                 placeholder="180"
                 placeholderTextColor={Colors.textMuted}

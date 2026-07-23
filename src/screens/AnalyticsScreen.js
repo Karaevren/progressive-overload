@@ -426,18 +426,31 @@ export default function AnalyticsScreen() {
           </View>
 
           <View style={styles.consistencyCard}>
-            <View style={[styles.consistencyIconWrapper, { backgroundColor: consistencyStats.diff <= 0 ? 'rgba(0, 229, 160, 0.15)' : 'rgba(255, 107, 107, 0.15)' }]}>
-              <Ionicons name={consistencyStats.diff <= 0 ? "trophy" : "alert-circle"} size={28} color={consistencyStats.diff <= 0 ? "#00E5A0" : "#FF6B6B"} />
+            <View style={[styles.consistencyIconWrapper, { backgroundColor: consistencyStats.completed === 0 ? 'rgba(255, 184, 77, 0.15)' : consistencyStats.diff <= 0 ? 'rgba(0, 229, 160, 0.15)' : 'rgba(255, 107, 107, 0.15)' }]}>
+              <Ionicons name={consistencyStats.completed === 0 ? "hourglass-outline" : consistencyStats.diff <= 0 ? "trophy" : "alert-circle"} size={28} color={consistencyStats.completed === 0 ? "#FFB84D" : consistencyStats.diff <= 0 ? "#00E5A0" : "#FF6B6B"} />
             </View>
             <Text style={styles.consistencyCardTitle}>Hedef Durumu</Text>
-            <Text style={[styles.consistencyCardValue, { fontSize: 16, marginTop: 4, color: consistencyStats.diff <= 0 ? '#00E5A0' : '#FF6B6B' }]}>
-              {consistencyStats.diff <= 0 
-                ? 'Hedef aşıldı! Harika iş.' 
-                : `Hedeflenen plandan ${consistencyStats.diff} gün eksik.`}
+            <Text style={[styles.consistencyCardValue, { fontSize: 16, marginTop: 4, color: consistencyStats.completed === 0 ? '#FFB84D' : consistencyStats.diff <= 0 ? '#00E5A0' : '#FF6B6B' }]}>
+              {consistencyStats.completed === 0
+                ? 'Henüz antrenmana başlanmadı.'
+                : consistencyStats.diff <= 0 
+                  ? 'Hedef aşıldı! Harika iş.' 
+                  : `Hedeflenen plandan ${consistencyStats.diff} gün eksik.`}
             </Text>
           </View>
           
           <Text style={[styles.consistencyTitle, { marginTop: 24 }]}>Antrenman Günlüğü</Text>
+          {heatmapData.length === 0 ? (
+            <View style={[styles.consistencyCard, { alignItems: 'center', paddingVertical: 32 }]}>
+              <View style={[styles.consistencyIconWrapper, { backgroundColor: 'rgba(255, 184, 77, 0.15)' }]}>
+                <Ionicons name="calendar-outline" size={28} color="#FFB84D" />
+              </View>
+              <Text style={[styles.consistencyCardValue, { fontSize: 15, marginTop: 8, color: Colors.textSecondary, textAlign: 'center' }]}>
+                Henüz antrenman verisi bulunmuyor.
+              </Text>
+            </View>
+          ) : (
+            <>
           <View style={styles.heatmapWrapper}>
             {/* Y-Axis */}
             <View style={styles.heatmapYAxis}>
@@ -530,6 +543,8 @@ export default function AnalyticsScreen() {
               <Text style={styles.legendText}>Daha Çok</Text>
             </View>
           </View>
+            </>
+          )}
 
           <View style={{height: 40}} />
         </ScrollView>

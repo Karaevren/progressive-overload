@@ -478,7 +478,7 @@ export default function RoutinesScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Text style={styles.headerTitle}>{t('screenTitles.routines')}</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>{t('screenTitles.routines')}</Text>
           <View style={styles.programCountBadge}>
             <Text style={styles.programCountText}>
               {t('routines.programCount', { count: programs.length })}
@@ -617,6 +617,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.textPrimary,
     letterSpacing: -0.5,
+    flexShrink: 1,
   },
   programCountBadge: {
     backgroundColor: Colors.primaryGlow,
@@ -625,6 +626,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.primary + '30',
+    flexShrink: 0,
   },
   programCountText: {
     color: Colors.primary,
@@ -639,6 +641,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 24,
+    paddingBottom: 100,
   },
 
   // Section
@@ -685,6 +688,7 @@ const styles = StyleSheet.create({
   },
   cardInfo: {
     flex: 1,
+    paddingRight: 50,
   },
   cardTitle: {
     fontSize: 16,
@@ -756,7 +760,7 @@ const styles = StyleSheet.create({
   // FAB
   fab: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 20,
     right: 20,
     flexDirection: 'row',
     alignItems: 'center',

@@ -803,6 +803,7 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontWeight: '600',
     marginLeft: 2,
+    flexShrink: 0,
   },
   unitTextCompleted: {
     color: Colors.primary,
@@ -826,6 +827,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
     marginRight: 6,
+    gap: 8,
   },
   inputWrapperSmall: {
     flexDirection: 'row',
@@ -835,14 +837,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     borderWidth: 1,
     borderColor: Colors.border,
-    minWidth: 50,
+    minWidth: 55,
   },
   weightInputSmall: {
     color: Colors.textPrimary,
     paddingVertical: 6,
     fontSize: 14,
     fontWeight: '700',
-    minWidth: 25,
+    width: 30,
     textAlign: 'center',
   },
   colonSeparator: {

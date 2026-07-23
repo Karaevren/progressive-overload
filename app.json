@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "progressive-overload",
-    "slug": "progressive-overload",
+    "name": "Sisyphos Track",
+    "slug": "sisyphos-track",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +15,8 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "package": "com.karaevren.sisyphostrack"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -23,6 +24,11 @@
     "plugins": [
       "expo-localization",
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "164b89fc-3714-43bd-9426-65ef77893145"
+      }
+    }
   }
 }
