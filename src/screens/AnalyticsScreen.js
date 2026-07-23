@@ -14,6 +14,7 @@ export default function AnalyticsScreen() {
   const [selectedExercise, setSelectedExercise] = useState('');
   const [chartData, setChartData] = useState([]);
   const [selectedTimeRange, setSelectedTimeRange] = useState('Son 1 Ay');
+  const [isDurationBased, setIsDurationBased] = useState(false);
   
   // Yeni State'ler
   const [activeTab, setActiveTab] = useState('performance');
@@ -166,69 +167,6 @@ export default function AnalyticsScreen() {
     }, [])
   );
 
-  const injectMockData = async () => {
-    try {
-      const existingData = await AsyncStorage.getItem('@workoutHistory');
-      let currentHistory = existingData ? JSON.parse(existingData) : [];
-
-      const now = new Date();
-      const mockRecords = [];
-      const offsets = [28, 22, 16, 11, 5, 1]; // 4 haftaya dağılmış 6 gün
-      const benchWeights = ["60", "65", "70", "75", "80", "85"];
-      const barfiksReps = ["5", "6", "8", "10", "12", "15"];
-      const runDistances = [
-        { km: "3", m: "0" },
-        { km: "4", m: "200" },
-        { km: "5", m: "0" },
-        { km: "6", m: "500" },
-        { km: "7", m: "500" },
-        { km: "8", m: "500" },
-      ];
-
-      for (let i = 0; i < 6; i++) {
-        const d = new Date(now);
-        d.setDate(d.getDate() - offsets[i]);
-        
-        mockRecords.push({
-          id: `mock_workout_${i}_${Date.now()}`,
-          date: d.toISOString(),
-          dayTitle: `Test Günü ${i+1}`,
-          completedData: {
-            [`mock_bench_${i}`]: {
-              name: 'Bench Press',
-              exerciseType: 'weight',
-              value: benchWeights[i],
-              completed: true
-            },
-            [`mock_barfiks_${i}`]: {
-              name: 'Barfiks',
-              exerciseType: 'bodyweight',
-              value: barfiksReps[i],
-              completed: true
-            },
-            [`mock_run_${i}`]: {
-              name: 'Koşu',
-              exerciseType: 'cardio',
-              cardioTargetType: 'distance',
-              km: runDistances[i].km,
-              meters: runDistances[i].m,
-              completed: true
-            }
-          }
-        });
-      }
-
-      // Mevcut verilerin en üstüne ekle (kronolojik olarak tersten de gidebiliriz ama grafikte düzelecek)
-      const updatedHistory = [...mockRecords, ...currentHistory];
-      await AsyncStorage.setItem('@workoutHistory', JSON.stringify(updatedHistory));
-      
-      loadHistory();
-      Alert.alert('Başarılı', '🧪 Test verileri yüklendi!');
-    } catch (error) {
-      console.warn("Mock data error:", error);
-    }
-  };
-
   const formatChartDate = (isoString) => {
     const date = new Date(isoString);
     const months = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
@@ -239,6 +177,7 @@ export default function AnalyticsScreen() {
     useCallback(() => {
       if (!selectedExercise || historyList.length === 0) {
         setChartData([]);
+        setIsDurationBased(false);
         return;
       }
 
@@ -250,6 +189,8 @@ export default function AnalyticsScreen() {
       else if (selectedTimeRange === 'Son 3 Ay') maxDays = 90;
       else if (selectedTimeRange === 'Son 6 Ay') maxDays = 180;
       
+      let durationFlag = false;
+
       historyList.forEach(record => {
         if (record.completedData && record.date) {
           const recordDate = new Date(record.date);
@@ -263,12 +204,26 @@ export default function AnalyticsScreen() {
             Object.values(record.completedData).forEach(ex => {
               if (ex.name === selectedExercise) {
                 hasDataForExercise = true;
+                
+                // Determine unit and total
                 if (ex.exerciseType === 'cardio') {
-                   const km = parseFloat(ex.km || 0);
-                   const meters = parseFloat(ex.meters || 0);
-                   if (km > 0 || meters > 0) {
-                      dayTotal += km + (meters / 1000);
+                   if (ex.cardioTargetType === 'duration' || (!ex.km && !ex.meters && (ex.minutes !== undefined || ex.seconds !== undefined))) {
+                      durationFlag = true;
+                      const mins = parseFloat(ex.minutes || 0);
+                      const secs = parseFloat(ex.seconds || 0);
+                      if (mins > 0 || secs > 0) {
+                         dayTotal += mins + (secs / 60);
+                      }
+                   } else {
+                      const km = parseFloat(ex.km || 0);
+                      const meters = parseFloat(ex.meters || 0);
+                      if (km > 0 || meters > 0) {
+                         dayTotal += km + (meters / 1000);
+                      }
                    }
+                } else if (ex.unit === 'Dakika' || ex.unit === 'Saniye' || ex.unit === 'Zaman') {
+                   durationFlag = true;
+                   dayTotal += parseFloat(ex.value || 0);
                 } else {
                    dayTotal += parseFloat(ex.value || 0);
                 }
@@ -285,6 +240,8 @@ export default function AnalyticsScreen() {
           }
         }
       });
+
+      setIsDurationBased(durationFlag);
 
       // Convert to array and sort by date ascending
       const dataPoints = Object.values(dailyData)
@@ -370,12 +327,21 @@ export default function AnalyticsScreen() {
               
               let percentage = 0;
               if (firstData > 0) {
-                percentage = (((lastData - firstData) / firstData) * 100);
+                if (isDurationBased) {
+                  percentage = (((firstData - lastData) / firstData) * 100);
+                } else {
+                  percentage = (((lastData - firstData) / firstData) * 100);
+                }
               }
               
               const isPositive = percentage > 0;
               const isNegative = percentage < 0;
               const percentColor = isPositive ? '#00E5A0' : (isNegative ? '#FF6B6B' : Colors.textSecondary);
+              
+              let statusText = isPositive ? 'Artış' : (isNegative ? 'Düşüş' : 'Değişim Yok');
+              if (isDurationBased) {
+                statusText = isPositive ? 'Hızlanma / Gelişim' : (isNegative ? 'Yavaşlama' : 'Değişim Yok');
+              }
               
               return (
                 <View style={styles.chartRow}>
@@ -414,12 +380,12 @@ export default function AnalyticsScreen() {
                     <Text style={[styles.summaryPercent, { color: percentColor }]}>
                       {isPositive ? '+' : ''}{percentage.toFixed(1)}%
                     </Text>
-                    <Text style={[styles.summaryStatus, { color: percentColor }]}>
-                      {isPositive ? 'Artış' : (isNegative ? 'Düşüş' : 'Değişim Yok')}
+                    <Text style={[styles.summaryStatus, { color: percentColor, textAlign: 'center' }]}>
+                      {statusText}
                     </Text>
                     <View style={styles.summaryDivider} />
-                    <Text style={styles.summarySubtext}>İlk: {parseFloat(firstData.toFixed(2))}</Text>
-                    <Text style={styles.summarySubtext}>Son: {parseFloat(lastData.toFixed(2))}</Text>
+                    <Text style={styles.summarySubtext}>İlk: {parseFloat(firstData.toFixed(2))} {isDurationBased ? 'dk' : ''}</Text>
+                    <Text style={styles.summarySubtext}>Son: {parseFloat(lastData.toFixed(2))} {isDurationBased ? 'dk' : ''}</Text>
                   </View>
                 </View>
               );
@@ -436,15 +402,6 @@ export default function AnalyticsScreen() {
             </Text>
           </View>
         )}
-
-            {/* Test Data Button */}
-            <TouchableOpacity
-              style={styles.mockDataButton}
-              onPress={injectMockData}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.mockDataButtonText}>🧪 Test Verisi Yükle</Text>
-            </TouchableOpacity>
           </View>
         </>
       ) : (

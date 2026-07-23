@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, TextInput, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, TextInput, Keyboard, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors } from '../theme/colors';
 import { useLanguage } from '../context/LanguageContext';
 import { useSettings } from '../context/SettingsContext';
 
-const SettingRow = ({ icon, title, subtitle, right, onPress }) => (
+const SettingRow = ({ icon, title, subtitle, right, onPress, themeStyles }) => (
   <TouchableOpacity 
     style={styles.settingRow} 
     onPress={onPress}
@@ -16,8 +18,8 @@ const SettingRow = ({ icon, title, subtitle, right, onPress }) => (
       <Ionicons name={icon} size={20} color={Colors.primary} />
     </View>
     <View style={styles.settingTextContainer}>
-      <Text style={styles.settingTitle}>{title}</Text>
-      {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+      <Text style={[styles.settingTitle, themeStyles && { color: themeStyles.text }]}>{title}</Text>
+      {subtitle && <Text style={[styles.settingSubtitle, themeStyles && { color: themeStyles.textSec }]}>{subtitle}</Text>}
     </View>
     {right && <View style={styles.settingRight}>{right}</View>}
   </TouchableOpacity>
@@ -36,27 +38,23 @@ const ProfileScreen = () => {
     convertWeight
   } = useSettings();
 
-  const [userName, setUserName] = useState('Ahmet Karaevren');
+  const [userName, setUserName] = useState('');
   const [profileData, setProfileData] = useState({ height: '' });
   const [userWeight, setUserWeight] = useState(77);
-  const [userGoal, setUserGoal] = useState({ name: 'Denizli Lykos Yarı Maratonu', date: '2026-10-25' });
-  const [inputName, setInputName] = useState('');
+  const [userGoal, setUserGoal] = useState({ name: 'Hedef Belirlenmedi', date: '' });
   const [inputWeight, setInputWeight] = useState('');
 
   const [isGoalModalVisible, setIsGoalModalVisible] = useState(false);
   const [goalInputName, setGoalInputName] = useState('');
   const [goalInputDate, setGoalInputDate] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [localNotifications, setLocalNotifications] = useState(false);
 
   useEffect(() => {
     loadProfileData();
   }, []);
 
   useEffect(() => {
-    setInputName(userName);
-  }, [userName]);
-
-  useEffect(() => {
-    // When settings change or weight changes, update the input string
     if (units === 'lb') {
       setInputWeight(Math.round(userWeight * 2.20462).toString());
     } else {
@@ -66,93 +64,39 @@ const ProfileScreen = () => {
 
   const loadProfileData = async () => {
     try {
-      const storedName = await AsyncStorage.getItem('@profile_name');
+      const storedName = await AsyncStorage.getItem('@userName');
       const storedProfile = await AsyncStorage.getItem('@userProfile');
       const storedGoal = await AsyncStorage.getItem('@userGoal');
+      const storedNotif = await AsyncStorage.getItem('@notifications_enabled');
       
-      if (storedName) {
-        setUserName(storedName);
-      }
+      if (storedName) setUserName(storedName);
+      if (storedNotif) setLocalNotifications(storedNotif === 'true');
+      
       if (storedProfile) {
         const parsed = JSON.parse(storedProfile);
         setProfileData({ height: parsed.height || '' });
-        if (parsed.weight) {
-          setUserWeight(parseFloat(parsed.weight));
-        }
+        if (parsed.weight) setUserWeight(parseFloat(parsed.weight));
       }
-      if (storedGoal) {
-        setUserGoal(JSON.parse(storedGoal));
-      }
+      if (storedGoal) setUserGoal(JSON.parse(storedGoal));
     } catch (e) {
       console.error('Failed to load profile data', e);
-    }
-  };
-
-  const saveName = async () => {
-    try {
-      const newName = inputName.trim() || 'Ahmet Karaevren';
-      setUserName(newName);
-      setInputName(newName);
-      await AsyncStorage.setItem('@profile_name', newName);
-    } catch (e) {
-      console.error('Failed to save name', e);
     }
   };
 
   const saveProfileSettings = async () => {
     try {
       let weightVal = parseFloat(inputWeight);
-      if (isNaN(weightVal) || weightVal <= 0) {
-        weightVal = userWeight; // revert on invalid
-      } else {
-        if (units === 'lb') {
-          weightVal = weightVal / 2.20462;
-        }
-      }
+      if (isNaN(weightVal) || weightVal <= 0) weightVal = userWeight;
+      else if (units === 'lb') weightVal = weightVal / 2.20462;
+      
       setUserWeight(weightVal);
-
-      await AsyncStorage.setItem('@userProfile', JSON.stringify({
-        height: profileData.height,
-        weight: weightVal.toString()
-      }));
+      await AsyncStorage.setItem('@userProfile', JSON.stringify({ height: profileData.height, weight: weightVal.toString() }));
+      await AsyncStorage.setItem('@userName', userName.trim());
       Keyboard.dismiss();
-      import('react-native').then(({ Alert }) => {
-        Alert.alert('Başarılı', 'Fiziksel verileriniz kaydedildi!');
-      });
+      Alert.alert('Başarılı', 'Fiziksel verileriniz ve isminiz kaydedildi!');
     } catch (e) {
-      console.error('Failed to save profile', e);
+      console.error(e);
     }
-  };
-
-  const handleResetData = () => {
-    import('react-native').then(({ Alert }) => {
-      Alert.alert(
-        'Emin misiniz?',
-        'Tüm antrenman geçmişin ve programların kalıcı olarak silinecek!',
-        [
-          { text: 'İptal', style: 'cancel' },
-          { 
-            text: 'Evet, Sıfırla', 
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await AsyncStorage.clear();
-                // State'leri boşalt/sıfırla
-                setProfileData({ height: '' });
-                setUserWeight(77);
-                setUserName('Ahmet Karaevren');
-                setInputName('Ahmet Karaevren');
-                setUserGoal({ name: 'Hedef Belirlenmedi', date: '2026-10-25' });
-                
-                Alert.alert('Başarılı', 'Tüm veriler silindi. Lütfen değişikliklerin tam yansıması için uygulamayı kapatıp yeniden açın.');
-              } catch (e) {
-                console.error('Clear error', e);
-              }
-            }
-          }
-        ]
-      );
-    });
   };
 
   const saveGoal = async () => {
@@ -170,6 +114,7 @@ const ProfileScreen = () => {
   };
 
   const getDaysLeft = () => {
+    if (!userGoal.date) return 0;
     const goalDate = new Date(userGoal.date + 'T00:00:00');
     if (isNaN(goalDate.getTime())) return 0;
     const today = new Date();
@@ -178,16 +123,39 @@ const ProfileScreen = () => {
     return diffDays > 0 ? diffDays : 0;
   };
 
-  const handleComingSoon = () => {
-    import('react-native').then(({ Alert }) => {
-      Alert.alert('Yakında', 'Bu özellik bir sonraki sürümde eklenecektir.');
-    });
+  const handleToggleNotifications = async (value) => {
+    if (value) {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('İzin Reddedildi', 'Bildirim gönderebilmek için ayarlardan izin vermelisiniz.');
+        return;
+      }
+      await Notifications.scheduleNotificationAsync({
+        content: { title: "Antrenman Vakti! 🏋️‍♂️", body: "Bugün hedeflerine bir adım daha yaklaş." },
+        trigger: { hour: 9, minute: 0, repeats: true },
+      });
+      await AsyncStorage.setItem('@notifications_enabled', 'true');
+      setLocalNotifications(true);
+    } else {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      await AsyncStorage.setItem('@notifications_enabled', 'false');
+      setLocalNotifications(false);
+    }
+  };
+
+  const themeStyles = {
+    bg: Colors.background,
+    surface: Colors.surface,
+    text: Colors.textPrimary,
+    textSec: Colors.textSecondary,
+    border: Colors.border,
+    inputBg: Colors.surfaceLight,
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{t('screenTitles.profile')}</Text>
+    <View style={[styles.container, { backgroundColor: themeStyles.bg }]}>
+      <View style={[styles.header, { backgroundColor: themeStyles.surface, borderBottomColor: themeStyles.border }]}>
+        <Text style={[styles.headerTitle, { color: themeStyles.text }]}>{t('screenTitles.profile')}</Text>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -200,8 +168,15 @@ const ProfileScreen = () => {
               <Ionicons name="person" size={40} color={Colors.primary} />
             </View>
           </View>
-          <Text style={styles.userName}>{userName}</Text>
-          <Text style={styles.userStats}>Boy: {profileData.height || '180'} cm • Kilo: {formatWeight ? formatWeight(userWeight) : `${userWeight} kg`}</Text>
+          <TextInput 
+            style={[styles.userName, { color: themeStyles.text, minWidth: 150, textAlign: 'center', marginHorizontal: 20 }]}
+            value={userName}
+            onChangeText={setUserName}
+            placeholder="İsminizi Girin"
+            placeholderTextColor={Colors.textMuted}
+            onEndEditing={saveProfileSettings}
+          />
+          <Text style={[styles.userStats, { color: themeStyles.textSec }]}>Boy: {profileData.height || '180'} cm • Kilo: {formatWeight ? formatWeight(userWeight) : `${userWeight} kg`}</Text>
         </View>
 
         {/* Big Goal Card (Geri Sayım) */}
@@ -222,47 +197,48 @@ const ProfileScreen = () => {
               <Ionicons name="pencil" size={18} color="#FFB84D" />
             </TouchableOpacity>
           </View>
-          <Text style={styles.goalSubtitle}>{userGoal.name}</Text>
-          <View style={styles.goalCountdownBox}>
-            <Text style={styles.goalCountdownText}>Kalan Süre: <Text style={{fontWeight: '800'}}>{getDaysLeft()} Gün</Text></Text>
+          <Text style={[styles.goalSubtitle, { color: themeStyles.text }]}>{userGoal.name}</Text>
+          <View style={[styles.goalCountdownBox, { backgroundColor: themeStyles.surface, borderColor: themeStyles.border }]}>
+            <Text style={[styles.goalCountdownText, { color: themeStyles.text }]}>Kalan Süre: <Text style={{fontWeight: '800'}}>{getDaysLeft()} Gün</Text></Text>
           </View>
         </View>
 
         {/* Physical Data Section */}
-        <Text style={styles.sectionTitle}>Fiziksel Veriler</Text>
-        <View style={styles.card}>
+        <Text style={[styles.sectionTitle, { color: themeStyles.textSec }]}>Fiziksel Veriler</Text>
+        <View style={[styles.card, { backgroundColor: themeStyles.surface, borderColor: themeStyles.border }]}>
           <View style={styles.inputRow}>
-            <Text style={styles.inputLabel}>Boy</Text>
+            <Text style={[styles.inputLabel, { color: themeStyles.text }]}>Boy</Text>
             <View style={styles.weightInputContainer}>
               <TextInput
-                style={[styles.textInput, styles.weightInput]}
+                style={[styles.textInput, styles.weightInput, { backgroundColor: themeStyles.inputBg, color: themeStyles.text }]}
                 value={profileData.height}
                 onChangeText={(text) => setProfileData({...profileData, height: text})}
                 keyboardType="numeric"
                 placeholder="180"
                 placeholderTextColor={Colors.textMuted}
               />
-              <View style={styles.unitBadge}>
-                <Text style={styles.unitBadgeText}>cm</Text>
+              <View style={[styles.unitBadge, { backgroundColor: themeStyles.border }]}>
+                <Text style={[styles.unitBadgeText, { color: themeStyles.textSec }]}>cm</Text>
               </View>
             </View>
           </View>
 
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: themeStyles.border }]} />
 
           <View style={styles.inputRow}>
-            <Text style={styles.inputLabel}>Kilo</Text>
+            <Text style={[styles.inputLabel, { color: themeStyles.text }]}>Kilo</Text>
             <View style={styles.weightInputContainer}>
               <TextInput
-                style={[styles.textInput, styles.weightInput]}
+                style={[styles.textInput, styles.weightInput, { backgroundColor: themeStyles.inputBg, color: themeStyles.text }]}
                 value={inputWeight}
                 onChangeText={setInputWeight}
                 keyboardType="numeric"
                 placeholder="77"
                 placeholderTextColor={Colors.textMuted}
+                onEndEditing={saveProfileSettings}
               />
-              <View style={styles.unitBadge}>
-                <Text style={styles.unitBadgeText}>{units}</Text>
+              <View style={[styles.unitBadge, { backgroundColor: themeStyles.border }]}>
+                <Text style={[styles.unitBadgeText, { color: themeStyles.textSec }]}>{units}</Text>
               </View>
             </View>
           </View>
@@ -273,19 +249,20 @@ const ProfileScreen = () => {
         </View>
 
         {/* Language Section */}
-        <Text style={styles.sectionTitle}>{t('langSelector.title')}</Text>
-        <View style={styles.card}>
+        <Text style={[styles.sectionTitle, { color: themeStyles.textSec }]}>{t('langSelector.title')}</Text>
+        <View style={[styles.card, { backgroundColor: themeStyles.surface, borderColor: themeStyles.border }]}>
           <View style={styles.languageContainer}>
             <TouchableOpacity 
               style={[
                 styles.languageButton, 
+                { backgroundColor: themeStyles.inputBg, borderColor: themeStyles.border },
                 locale === 'tr' && styles.languageButtonActive
               ]}
               onPress={() => changeLanguage('tr')}
             >
               <Text style={styles.languageEmoji}>🇹🇷</Text>
               <Text style={[
-                styles.languageText,
+                styles.languageText, { color: themeStyles.textSec },
                 locale === 'tr' && styles.languageTextActive
               ]}>{t('langSelector.turkish')}</Text>
             </TouchableOpacity>
@@ -293,13 +270,14 @@ const ProfileScreen = () => {
             <TouchableOpacity 
               style={[
                 styles.languageButton, 
+                { backgroundColor: themeStyles.inputBg, borderColor: themeStyles.border },
                 locale === 'en' && styles.languageButtonActive
               ]}
               onPress={() => changeLanguage('en')}
             >
               <Text style={styles.languageEmoji}>🇬🇧</Text>
               <Text style={[
-                styles.languageText,
+                styles.languageText, { color: themeStyles.textSec },
                 locale === 'en' && styles.languageTextActive
               ]}>{t('langSelector.english')}</Text>
             </TouchableOpacity>
@@ -307,72 +285,48 @@ const ProfileScreen = () => {
         </View>
 
         {/* Settings Section */}
-        <Text style={styles.sectionTitle}>{t('profile.settings')}</Text>
-        <View style={styles.card}>
+        <Text style={[styles.sectionTitle, { color: themeStyles.textSec }]}>{t('profile.settings')}</Text>
+        <View style={[styles.card, { backgroundColor: themeStyles.surface, borderColor: themeStyles.border }]}>
           <SettingRow
+            themeStyles={themeStyles}
             icon="notifications-outline"
             title={t('profile.notifications')}
             subtitle={t('profile.notificationsDesc')}
-            onPress={handleComingSoon}
             right={
               <Switch
-                value={notifications}
-                onValueChange={handleComingSoon}
-                trackColor={{ false: Colors.border, true: Colors.primaryDark }}
-                thumbColor={notifications ? Colors.primary : Colors.textMuted}
+                value={localNotifications}
+                onValueChange={handleToggleNotifications}
+                trackColor={{ false: themeStyles.border, true: Colors.primaryDark }}
+                thumbColor={localNotifications ? Colors.primary : Colors.textMuted}
               />
             }
           />
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: themeStyles.border }]} />
           <SettingRow
-            icon={darkMode ? "moon-outline" : "sunny-outline"}
-            title={darkMode ? t('profile.darkMode') : t('profile.lightMode')}
-            subtitle={darkMode ? t('profile.darkModeDesc') : t('profile.lightModeDesc')}
-            onPress={handleComingSoon}
-            right={
-              <Switch
-                value={darkMode}
-                onValueChange={handleComingSoon}
-                trackColor={{ false: Colors.border, true: Colors.primaryDark }}
-                thumbColor={darkMode ? Colors.primary : Colors.textMuted}
-              />
-            }
-          />
-          <View style={styles.divider} />
-          <SettingRow
+            themeStyles={themeStyles}
             icon="barbell-outline"
             title={t('profile.units')}
             subtitle={t('profile.unitsDesc')}
             onPress={toggleUnits}
             right={
-              <View style={styles.unitToggle}>
-                <Text style={styles.unitToggleText}>{units.toUpperCase()}</Text>
-                <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+              <View style={[styles.unitToggle, { backgroundColor: themeStyles.inputBg }]}>
+                <Text style={[styles.unitToggleText, { color: themeStyles.text }]}>{units.toUpperCase()}</Text>
+                <Ionicons name="chevron-forward" size={20} color={themeStyles.textSec} />
               </View>
             }
           />
         </View>
 
         {/* About Section */}
-        <Text style={styles.sectionTitle}>{t('profile.about')}</Text>
-        <View style={styles.card}>
+        <Text style={[styles.sectionTitle, { color: themeStyles.textSec }]}>{t('profile.about')}</Text>
+        <View style={[styles.card, { backgroundColor: themeStyles.surface, borderColor: themeStyles.border }]}>
           <SettingRow
+            themeStyles={themeStyles}
             icon="information-circle-outline"
             title={t('profile.appName')}
             right={<Text style={styles.versionText}>{t('profile.version')}</Text>}
           />
         </View>
-
-        {/* Danger Zone */}
-        <Text style={[styles.sectionTitle, { color: Colors.error }]}>Veri Yönetimi</Text>
-        <TouchableOpacity 
-          style={styles.dangerButton} 
-          onPress={handleResetData}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="warning-outline" size={20} color={Colors.background} style={{ marginRight: 8 }} />
-          <Text style={styles.dangerButtonText}>Tüm Verileri Sıfırla</Text>
-        </TouchableOpacity>
 
         <View style={styles.bottomPadding} />
       </ScrollView>
@@ -380,12 +334,12 @@ const ProfileScreen = () => {
       {/* Goal Edit Modal */}
       {isGoalModalVisible && (
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Hedefi Düzenle</Text>
+          <View style={[styles.modalContent, { backgroundColor: themeStyles.surface, borderColor: themeStyles.border }]}>
+            <Text style={[styles.modalTitle, { color: themeStyles.text }]}>Hedefi Düzenle</Text>
             <View style={styles.inputRow}>
-              <Text style={styles.inputLabel}>Hedef Adı</Text>
+              <Text style={[styles.inputLabel, { color: themeStyles.text }]}>Hedef Adı</Text>
               <TextInput
-                style={styles.textInput}
+                style={[styles.textInput, { backgroundColor: themeStyles.inputBg, color: themeStyles.text }]}
                 value={goalInputName}
                 onChangeText={setGoalInputName}
                 placeholder="Örn: Yarı Maraton"
@@ -393,18 +347,52 @@ const ProfileScreen = () => {
               />
             </View>
             <View style={styles.inputRow}>
-              <Text style={styles.inputLabel}>Hedef Tarihi</Text>
-              <TextInput
-                style={styles.textInput}
-                value={goalInputDate}
-                onChangeText={setGoalInputDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={Colors.textMuted}
-              />
+              <Text style={[styles.inputLabel, { color: themeStyles.text }]}>Hedef Tarihi</Text>
+              {Platform.OS === 'web' ? (
+                <View style={{ flex: 2 }}>
+                  {React.createElement('input', {
+                    type: 'date',
+                    value: goalInputDate,
+                    onChange: (e) => setGoalInputDate(e.target.value),
+                    style: {
+                      padding: '10px 16px',
+                      borderRadius: '12px',
+                      border: 'none',
+                      backgroundColor: themeStyles.inputBg,
+                      color: themeStyles.text,
+                      fontSize: '16px',
+                      width: '100%',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }
+                  })}
+                </View>
+              ) : (
+                <View style={{ flex: 2 }}>
+                  <TouchableOpacity 
+                    style={[styles.textInput, { flex: 0, justifyContent: 'center', backgroundColor: themeStyles.inputBg }]} 
+                    onPress={() => setShowDatePicker(true)}
+                  >
+                    <Text style={{ color: themeStyles.text }}>{goalInputDate || 'Tarih Seç'}</Text>
+                  </TouchableOpacity>
+                  
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={new Date(goalInputDate || new Date())}
+                      mode="date"
+                      display="default"
+                      onChange={(event, selectedDate) => {
+                        setShowDatePicker(Platform.OS === 'ios');
+                        if (selectedDate) setGoalInputDate(selectedDate.toISOString().split('T')[0]);
+                      }}
+                    />
+                  )}
+                </View>
+              )}
             </View>
             <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalCancelButton} onPress={() => setIsGoalModalVisible(false)}>
-                <Text style={styles.modalCancelText}>İptal</Text>
+              <TouchableOpacity style={[styles.modalCancelButton, { backgroundColor: themeStyles.inputBg, borderColor: themeStyles.border }]} onPress={() => setIsGoalModalVisible(false)}>
+                <Text style={[styles.modalCancelText, { color: themeStyles.textSec }]}>İptal</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveButton} onPress={saveGoal}>
                 <Text style={styles.modalSaveText}>Kaydet</Text>

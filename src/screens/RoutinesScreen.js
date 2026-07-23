@@ -29,37 +29,133 @@ const PROGRAM_ICONS = [
   { name: 'barbell-outline', color: '#00B8D4' },
 ];
 
-function getInitialPrograms(t) {
-  return [
-    {
-      id: '1',
-      name: t('routines.mockProgram1'),
-      description: t('routines.mockProgram1Desc'),
-      daysPerWeek: 5,
-      exerciseCount: 25,
-      icon: PROGRAM_ICONS[0],
-      accentColor: '#FF6B6B',
-    },
-    {
-      id: '2',
-      name: t('routines.mockProgram2'),
-      description: t('routines.mockProgram2Desc'),
-      daysPerWeek: 3,
-      exerciseCount: 18,
-      icon: PROGRAM_ICONS[1],
-      accentColor: '#6C63FF',
-    },
-    {
-      id: '3',
-      name: t('routines.mockProgram3'),
-      description: t('routines.mockProgram3Desc'),
-      daysPerWeek: 4,
-      exerciseCount: 12,
-      icon: PROGRAM_ICONS[2],
-      accentColor: '#00E5A0',
-    },
-  ];
-}
+const defaultPrograms = [
+  {
+    id: 'stok_1',
+    title: 'İleri Seviye: 5 Günlük Hipertrofi',
+    description: 'Kas geliştirme odaklı yoğun program ve dinlenme günleri.',
+    days: [
+      {
+        dayName: '1. Gün - İtiş',
+        exercises: [
+          { name: 'Plate Loaded Chest Press', type: 'weight', sets: 2, reps: 6 },
+          { name: 'Smith Machine Low Incline Press', type: 'weight', sets: 2, reps: 6 },
+          { name: 'Chest Fly Machine', type: 'weight', sets: 1, reps: 8 },
+          { name: 'Shoulder Press Machine', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Lateral Raise', type: 'weight', sets: 3, reps: 10 },
+          { name: 'Triceps Pushdown', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Overhead Rope Extension', type: 'weight', sets: 2, reps: 10 }
+        ]
+      },
+      {
+        dayName: '2. Gün - Çekiş',
+        exercises: [
+          { name: 'Lat Pulldown', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Plate Loaded Wide Grip Row', type: 'weight', sets: 3, reps: 8 },
+          { name: 'Cable Row', type: 'weight', sets: 1, reps: 10 },
+          { name: 'Incline Dumbell Curl', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Cable Curl', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Hammer & Reverse Curl (Superset)', type: 'weight', sets: 2, reps: 10 }
+        ]
+      },
+      {
+        dayName: '3. Gün - Bacak & Karın/Kalf',
+        exercises: [
+          { name: 'Leg Press', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Smith Machine Squat', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Leg Extension', type: 'weight', sets: 2, reps: 10 },
+          { name: 'Seated Leg Curl', type: 'weight', sets: 3, reps: 10 },
+          { name: 'Standing Calf Raise', type: 'weight', sets: 3, reps: 10 },
+          { name: 'Cable Crunch', type: 'weight', sets: 3, reps: 10 }
+        ]
+      },
+      {
+        dayName: '4. Gün - Dinlenme',
+        exercises: []
+      },
+      {
+        dayName: '5. Gün - İtiş Varyasyon',
+        exercises: [
+          { name: 'Shoulder Press Machine', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Lateral Raise', type: 'weight', sets: 3, reps: 10 },
+          { name: 'Smith Machine Low Incline Press', type: 'weight', sets: 2, reps: 6 },
+          { name: 'Chest Fly Machine', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Cable Rear Delt Fly', type: 'weight', sets: 2, reps: 10 },
+          { name: 'Triceps Pushdown', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Overhead Rope Extension', type: 'weight', sets: 2, reps: 10 }
+        ]
+      },
+      {
+        dayName: '6. Gün - Çekiş & Bacak',
+        exercises: [
+          { name: 'Plate Loaded Wide Grip Row', type: 'weight', sets: 3, reps: 8 },
+          { name: 'Lat Pulldown', type: 'weight', sets: 3, reps: 8 },
+          { name: 'Romanian Deadlift', type: 'weight', sets: 2, reps: 6 },
+          { name: 'Cable Curl', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Hammer & Reverse Curl (Superset)', type: 'weight', sets: 2, reps: 10 },
+          { name: 'Leg Extension', type: 'weight', sets: 2, reps: 8 },
+          { name: 'Seated Leg Curl', type: 'weight', sets: 1, reps: 10 },
+          { name: 'Standing Calf Raise', type: 'weight', sets: 3, reps: 10 },
+          { name: 'Cable Crunch', type: 'weight', sets: 3, reps: 10 }
+        ]
+      },
+      {
+        dayName: '7. Gün - Aktif Dinlenme',
+        exercises: []
+      }
+    ]
+  },
+  {
+    id: 'stok_2',
+    title: 'Yarı Maraton: 21.1 km Hazırlık',
+    description: '100 günlük süreçte mesafeyi kademeli artıran 7 günlük koşu döngüsü.',
+    days: [
+      {
+        dayName: '1. Gün - Hafif Tempo (Base Run)',
+        exercises: [
+          { name: 'Isınma Yürüyüşü', type: 'cardio', distance: 1, time: 10 },
+          { name: 'Hafif Tempo Koşu (Zone 2)', type: 'cardio', distance: 4, time: 30 }
+        ]
+      },
+      {
+        dayName: '2. Gün - İnterval (Hız) Antrenmanı',
+        exercises: [
+          { name: 'Isınma Koşusu', type: 'cardio', distance: 2, time: 15 },
+          { name: '400m Hızlı Koşu x 4 Set', type: 'cardio', distance: 1.6, time: 10 },
+          { name: 'Soğuma Yürüyüşü', type: 'cardio', distance: 1, time: 10 }
+        ]
+      },
+      {
+        dayName: '3. Gün - Tam Dinlenme',
+        exercises: []
+      },
+      {
+        dayName: '4. Gün - Eşik (Tempo) Koşusu',
+        exercises: [
+          { name: 'Isınma Koşusu', type: 'cardio', distance: 1, time: 8 },
+          { name: 'Hedef Yarı Maraton Temposunda Koşu', type: 'cardio', distance: 5, time: 35 },
+          { name: 'Soğuma Yürüyüşü', type: 'cardio', distance: 1, time: 10 }
+        ]
+      },
+      {
+        dayName: '5. Gün - Çapraz Antrenman (Cross-Training)',
+        exercises: [
+          { name: 'İp Atlama veya Bisiklet', type: 'cardio', distance: 0, time: 30 }
+        ]
+      },
+      {
+        dayName: '6. Gün - Uzun Koşu (Long Run)',
+        exercises: [
+          { name: 'Haftanın Uzun Koşusu', type: 'cardio', distance: 8, time: 60 }
+        ]
+      },
+      {
+        dayName: '7. Gün - Aktif Dinlenme (Yürüyüş/Yoga)',
+        exercises: []
+      }
+    ]
+  }
+];
 
 function ProgramCard({ program, t, onPress, onDelete, isActive, onPressActive }) {
   return (
@@ -168,7 +264,6 @@ export default function RoutinesScreen({ navigation }) {
 
   const DAY_NAMES = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 
-  // Programları yükle ve her biri için dinamik istatistikleri hesapla
   useFocusEffect(
     useCallback(() => {
       const loadRoutines = async () => {
@@ -184,8 +279,54 @@ export default function RoutinesScreen({ navigation }) {
 
           // Fallback if empty
           if (routinesList.length === 0) {
-            routinesList = getInitialPrograms(t);
+            // Save main list dynamically adding app specific required fields
+            routinesList = defaultPrograms.map((p, index) => ({
+              id: p.id,
+              name: p.title || p.name,
+              description: p.description || '',
+              icon: p.icon || PROGRAM_ICONS[index % PROGRAM_ICONS.length],
+              accentColor: p.accentColor || PROGRAM_ICONS[index % PROGRAM_ICONS.length].color
+            }));
             await AsyncStorage.setItem(ROUTINES_STORAGE_KEY, JSON.stringify(routinesList));
+
+            // Sync the skeleton days directly into separate storage keys and adapt user fields
+            for (const prog of defaultPrograms) {
+              if (prog.days) {
+                for (let idx = 0; idx < prog.days.length; idx++) {
+                  if (idx >= 7) break; // Maximum 7 days
+                  const day = prog.days[idx];
+                  const dayKey = DAY_NAMES[idx]; // 'Pazartesi', 'Salı', vs.
+
+                  const mappedExercises = day.exercises.map((ex, exIndex) => {
+                    const mappedEx = { id: `${prog.id}_${dayKey}_ex${exIndex}`, name: ex.name, completed: false };
+                    if (ex.type === 'weight') {
+                      mappedEx.exerciseType = 'weight';
+                      mappedEx.sets = ex.sets ? ex.sets.toString() : '';
+                      mappedEx.reps = ex.reps ? ex.reps.toString() : '';
+                    } else if (ex.type === 'cardio') {
+                      mappedEx.exerciseType = 'cardio';
+                      if (ex.distance > 0) {
+                         mappedEx.cardioTargetType = 'distance';
+                         mappedEx.cardioTargetKm = ex.distance.toString();
+                         mappedEx.cardioTargetMeters = '0';
+                         mappedEx.cardioTargetMinutes = ex.time ? ex.time.toString() : '';
+                      } else {
+                         mappedEx.cardioTargetType = 'duration';
+                         mappedEx.cardioTargetMinutes = ex.time ? ex.time.toString() : '';
+                      }
+                    } else {
+                      mappedEx.exerciseType = ex.exerciseType || 'weight';
+                    }
+                    return mappedEx;
+                  });
+                  
+                  await AsyncStorage.setItem(`@program_${prog.id}_${dayKey}`, JSON.stringify({ 
+                    dayTitle: day.dayName, // Maps "1. Gün - İtiş" so it shows as title on the day card
+                    exercises: mappedExercises 
+                  }));
+                }
+              }
+            }
           }
 
           // Her program için dinamik activeDays ve totalExercises hesapla
@@ -227,7 +368,6 @@ export default function RoutinesScreen({ navigation }) {
           }
         } catch (error) {
           console.warn('Programlar yüklenirken hata:', error);
-          setPrograms(getInitialPrograms(t));
         }
       };
 
