@@ -20,6 +20,14 @@ import { Colors } from '../theme/colors';
 
 function ExerciseCard({ item, onDelete }) {
   const isFailure = item.rir === '0';
+  const exerciseType = item.exerciseType || 'weight';
+
+  const typeLabels = {
+    weight: { label: 'Ağırlık', icon: 'barbell-outline', color: '#00B8D4' },
+    bodyweight: { label: 'Vücut Ağırlığı', icon: 'body-outline', color: '#FFB84D' },
+    cardio: { label: 'Kardiyo', icon: 'heart-outline', color: '#FF6B6B' },
+  };
+  const typeInfo = typeLabels[exerciseType] || typeLabels.weight;
 
   return (
     <View style={styles.exerciseCard}>
@@ -36,27 +44,53 @@ function ExerciseCard({ item, onDelete }) {
       </View>
 
       <View style={styles.badgeContainer}>
-        <View style={styles.badge}>
-          <Ionicons name="layers-outline" size={14} color={Colors.primary} />
-          <Text style={styles.badgeText}>{item.sets} Set</Text>
+        <View style={[styles.badge, { backgroundColor: typeInfo.color + '18', borderColor: typeInfo.color + '30' }]}>
+          <Ionicons name={typeInfo.icon} size={14} color={typeInfo.color} />
+          <Text style={[styles.badgeText, { color: typeInfo.color }]}>{typeInfo.label}</Text>
         </View>
 
-        <View style={styles.badge}>
-          <Ionicons name="repeat-outline" size={14} color={Colors.primary} />
-          <Text style={styles.badgeText}>{item.reps} Tekrar</Text>
-        </View>
+        {exerciseType === 'cardio' ? (
+          <>
+            <View style={styles.badge}>
+              <Ionicons name={item.cardioTargetType === 'distance' ? 'navigate-outline' : 'time-outline'} size={14} color={Colors.primary} />
+              <Text style={styles.badgeText}>
+                {item.cardioTargetType === 'distance' 
+                  ? `${item.cardioTargetKm > 0 ? item.cardioTargetKm + ' KM ' : ''}${item.cardioTargetMeters > 0 ? item.cardioTargetMeters + ' Metre' : ''}`.trim() || '0 KM'
+                  : `${item.cardioTargetHours > 0 ? item.cardioTargetHours + ' Saat ' : ''}${item.cardioTargetMinutes > 0 ? item.cardioTargetMinutes + ' Dk' : ''}`.trim() || '0 Dk'}
+              </Text>
+            </View>
+            <View style={styles.badge}>
+              <Ionicons name="flag-outline" size={14} color={Colors.primary} />
+              <Text style={styles.badgeText}>
+                {item.cardioTargetType === 'distance' ? 'Mesafe Hedefli' : 'Süre Hedefli'}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.badge}>
+              <Ionicons name="layers-outline" size={14} color={Colors.primary} />
+              <Text style={styles.badgeText}>{item.sets} Set</Text>
+            </View>
 
-        {item.rir !== undefined && item.rir !== '' && (
-          <View style={[styles.badge, isFailure && styles.badgeFailure]}>
-            <Ionicons
-              name={isFailure ? 'flame' : 'speedometer-outline'}
-              size={14}
-              color={isFailure ? '#FF6B6B' : Colors.primary}
-            />
-            <Text style={[styles.badgeText, isFailure && styles.badgeTextFailure]}>
-              {isFailure ? 'Tükeniş (RIR 0)' : `RIR: ${item.rir}`}
-            </Text>
-          </View>
+            <View style={styles.badge}>
+              <Ionicons name="repeat-outline" size={14} color={Colors.primary} />
+              <Text style={styles.badgeText}>{item.reps} Tekrar</Text>
+            </View>
+
+            {exerciseType === 'weight' && item.rir !== undefined && item.rir !== '' && (
+              <View style={[styles.badge, isFailure && styles.badgeFailure]}>
+                <Ionicons
+                  name={isFailure ? 'flame' : 'speedometer-outline'}
+                  size={14}
+                  color={isFailure ? '#FF6B6B' : Colors.primary}
+                />
+                <Text style={[styles.badgeText, isFailure && styles.badgeTextFailure]}>
+                  {isFailure ? 'Tükeniş (RIR 0)' : `RIR: ${item.rir}`}
+                </Text>
+              </View>
+            )}
+          </>
         )}
       </View>
     </View>
@@ -82,6 +116,12 @@ export default function DayDetailScreen({ route, navigation }) {
   const [sets, setSets] = useState('');
   const [reps, setReps] = useState('');
   const [rir, setRir] = useState('');
+  const [exerciseType, setExerciseType] = useState('weight');
+  const [cardioTargetType, setCardioTargetType] = useState('distance');
+  const [cardioTargetHours, setCardioTargetHours] = useState('');
+  const [cardioTargetMinutes, setCardioTargetMinutes] = useState('');
+  const [cardioTargetKm, setCardioTargetKm] = useState('');
+  const [cardioTargetMeters, setCardioTargetMeters] = useState('');
 
   // Sayfa yüklendiğinde AsyncStorage'dan veriyi oku
   useEffect(() => {
@@ -115,18 +155,48 @@ export default function DayDetailScreen({ route, navigation }) {
     setSets('');
     setReps('');
     setRir('');
+    setExerciseType('weight');
+    setCardioTargetType('distance');
+    setCardioTargetHours('');
+    setCardioTargetMinutes('');
+    setCardioTargetKm('');
+    setCardioTargetMeters('');
   };
 
   const handleSaveExercise = () => {
     if (!exerciseName.trim()) return;
 
-    const newExercise = {
-      id: Date.now().toString(),
-      name: exerciseName.trim(),
-      sets: sets.trim() || '1',
-      reps: reps.trim() || '1',
-      rir: rir.trim(),
-    };
+    let newExercise;
+
+    if (exerciseType === 'cardio') {
+      newExercise = {
+        id: Date.now().toString(),
+        name: exerciseName.trim(),
+        exerciseType: 'cardio',
+        cardioTargetType: cardioTargetType,
+        cardioTargetHours: cardioTargetType === 'duration' ? (cardioTargetHours.trim() || '0') : undefined,
+        cardioTargetMinutes: cardioTargetType === 'duration' ? (cardioTargetMinutes.trim() || '0') : undefined,
+        cardioTargetKm: cardioTargetType === 'distance' ? (cardioTargetKm.trim() || '0') : undefined,
+        cardioTargetMeters: cardioTargetType === 'distance' ? (cardioTargetMeters.trim() || '0') : undefined,
+      };
+    } else if (exerciseType === 'bodyweight') {
+      newExercise = {
+        id: Date.now().toString(),
+        name: exerciseName.trim(),
+        exerciseType: 'bodyweight',
+        sets: sets.trim() || '1',
+        reps: reps.trim() || '1',
+      };
+    } else {
+      newExercise = {
+        id: Date.now().toString(),
+        name: exerciseName.trim(),
+        exerciseType: 'weight',
+        sets: sets.trim() || '1',
+        reps: reps.trim() || '1',
+        rir: rir.trim(),
+      };
+    }
 
     setExercises((prev) => [...prev, newExercise]);
     handleCloseModal();
@@ -171,6 +241,17 @@ export default function DayDetailScreen({ route, navigation }) {
 
   // Gerçek Kaydetme İşlemi (Header Butonu)
   const handleSaveDay = async () => {
+    // Boş gün başlığı validasyonu
+    if (!dayTitle.trim()) {
+      const message = 'Lütfen geçerli bir gün ismi girin.';
+      if (Platform.OS === 'web') {
+        window.alert(message);
+      } else {
+        Alert.alert('Hata', message);
+      }
+      return;
+    }
+
     try {
       const dataToSave = {
         dayTitle,
@@ -287,49 +368,173 @@ export default function DayDetailScreen({ route, navigation }) {
                       />
                     </View>
 
-                    {/* Sets, Reps & RIR Inputs Row */}
-                    <View style={styles.inputRow}>
-                      <View style={[styles.inputGroup, { flex: 1 }]}>
-                        <Text style={styles.inputLabel}>Set Sayısı</Text>
-                        <TextInput
-                          style={styles.modalInput}
-                          placeholder="4"
-                          placeholderTextColor={Colors.textMuted}
-                          keyboardType="numeric"
-                          value={sets}
-                          onChangeText={(text) => setSets(text.replace(/[^0-9]/g, ''))}
-                        />
-                      </View>
+                    {/* Exercise Type Selector */}
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Egzersiz Tipi</Text>
+                      <View style={styles.typeButtonRow}>
+                        <TouchableOpacity
+                          style={[styles.typeButton, exerciseType === 'weight' && styles.typeButtonActive]}
+                          onPress={() => setExerciseType('weight')}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="barbell-outline" size={16} color={exerciseType === 'weight' ? Colors.background : Colors.textSecondary} />
+                          <Text style={[styles.typeButtonText, exerciseType === 'weight' && styles.typeButtonTextActive]}>Ağırlık</Text>
+                        </TouchableOpacity>
 
-                      <View style={[styles.inputGroup, { flex: 1 }]}>
-                        <Text style={styles.inputLabel}>Tekrar Sayısı</Text>
-                        <TextInput
-                          style={styles.modalInput}
-                          placeholder="12"
-                          placeholderTextColor={Colors.textMuted}
-                          keyboardType="numeric"
-                          value={reps}
-                          onChangeText={(text) => setReps(text.replace(/[^0-9]/g, ''))}
-                        />
-                      </View>
+                        <TouchableOpacity
+                          style={[styles.typeButton, exerciseType === 'bodyweight' && styles.typeButtonActive]}
+                          onPress={() => setExerciseType('bodyweight')}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="body-outline" size={16} color={exerciseType === 'bodyweight' ? Colors.background : Colors.textSecondary} />
+                          <Text style={[styles.typeButtonText, exerciseType === 'bodyweight' && styles.typeButtonTextActive]}>Vücut Ağ.</Text>
+                        </TouchableOpacity>
 
-                      <View style={[styles.inputGroup, { flex: 1 }]}>
-                        <Text style={styles.inputLabel}>RIR</Text>
-                        <TextInput
-                          style={styles.modalInput}
-                          placeholder="RIR (Örn: 1)"
-                          placeholderTextColor={Colors.textMuted}
-                          keyboardType="numeric"
-                          value={rir}
-                          onChangeText={(text) => setRir(text.replace(/[^0-9]/g, ''))}
-                        />
+                        <TouchableOpacity
+                          style={[styles.typeButton, exerciseType === 'cardio' && styles.typeButtonActive]}
+                          onPress={() => setExerciseType('cardio')}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="heart-outline" size={16} color={exerciseType === 'cardio' ? Colors.background : Colors.textSecondary} />
+                          <Text style={[styles.typeButtonText, exerciseType === 'cardio' && styles.typeButtonTextActive]}>Kardiyo</Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
 
-                    {/* RIR Information Subtext */}
-                    <Text style={styles.rirInfoText}>
-                      RIR: Set bittiğinde yapabileceğiniz fazladan tekrar sayısıdır (0 = Tam Tükeniş)
-                    </Text>
+                    {/* Dinamik Form Alanları */}
+                    {exerciseType === 'cardio' ? (
+                      <>
+                        {/* Kardiyo Hedef Tipi Seçici */}
+                        <View style={styles.inputGroup}>
+                          <Text style={styles.inputLabel}>Kardiyo Hedefi</Text>
+                          <View style={styles.typeButtonRow}>
+                            <TouchableOpacity
+                              style={[styles.typeButton, cardioTargetType === 'distance' && styles.typeButtonActive]}
+                              onPress={() => setCardioTargetType('distance')}
+                              activeOpacity={0.7}
+                            >
+                              <Ionicons name="navigate-outline" size={16} color={cardioTargetType === 'distance' ? Colors.background : Colors.textSecondary} />
+                              <Text style={[styles.typeButtonText, cardioTargetType === 'distance' && styles.typeButtonTextActive]}>Mesafe Hedefli</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={[styles.typeButton, cardioTargetType === 'duration' && styles.typeButtonActive]}
+                              onPress={() => setCardioTargetType('duration')}
+                              activeOpacity={0.7}
+                            >
+                              <Ionicons name="time-outline" size={16} color={cardioTargetType === 'duration' ? Colors.background : Colors.textSecondary} />
+                              <Text style={[styles.typeButtonText, cardioTargetType === 'duration' && styles.typeButtonTextActive]}>Süre Hedefli</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+                        {/* Kardiyo Hedef Değeri */}
+                        <View style={styles.inputRow}>
+                          {cardioTargetType === 'distance' ? (
+                            <>
+                              <View style={[styles.inputGroup, { flex: 1 }]}>
+                                <Text style={styles.inputLabel}>KM</Text>
+                                <TextInput
+                                  style={styles.modalInput}
+                                  placeholder="Örn: 5"
+                                  placeholderTextColor={Colors.textMuted}
+                                  keyboardType="numeric"
+                                  value={cardioTargetKm}
+                                  onChangeText={(text) => setCardioTargetKm(text.replace(/[^0-9]/g, ''))}
+                                />
+                              </View>
+                              <View style={[styles.inputGroup, { flex: 1 }]}>
+                                <Text style={styles.inputLabel}>Metre</Text>
+                                <TextInput
+                                  style={styles.modalInput}
+                                  placeholder="Örn: 500"
+                                  placeholderTextColor={Colors.textMuted}
+                                  keyboardType="numeric"
+                                  value={cardioTargetMeters}
+                                  onChangeText={(text) => setCardioTargetMeters(text.replace(/[^0-9]/g, ''))}
+                                />
+                              </View>
+                            </>
+                          ) : (
+                            <>
+                              <View style={[styles.inputGroup, { flex: 1 }]}>
+                                <Text style={styles.inputLabel}>Saat</Text>
+                                <TextInput
+                                  style={styles.modalInput}
+                                  placeholder="Örn: 1"
+                                  placeholderTextColor={Colors.textMuted}
+                                  keyboardType="numeric"
+                                  value={cardioTargetHours}
+                                  onChangeText={(text) => setCardioTargetHours(text.replace(/[^0-9]/g, ''))}
+                                />
+                              </View>
+                              <View style={[styles.inputGroup, { flex: 1 }]}>
+                                <Text style={styles.inputLabel}>Dakika</Text>
+                                <TextInput
+                                  style={styles.modalInput}
+                                  placeholder="Örn: 30"
+                                  placeholderTextColor={Colors.textMuted}
+                                  keyboardType="numeric"
+                                  value={cardioTargetMinutes}
+                                  onChangeText={(text) => setCardioTargetMinutes(text.replace(/[^0-9]/g, ''))}
+                                />
+                              </View>
+                            </>
+                          )}
+                        </View>
+                      </>
+                    ) : (
+                      <>
+                        {/* Set & Tekrar Inputs */}
+                        <View style={styles.inputRow}>
+                          <View style={[styles.inputGroup, { flex: 1 }]}>
+                            <Text style={styles.inputLabel}>Hedef Set</Text>
+                            <TextInput
+                              style={styles.modalInput}
+                              placeholder="4"
+                              placeholderTextColor={Colors.textMuted}
+                              keyboardType="numeric"
+                              value={sets}
+                              onChangeText={(text) => setSets(text.replace(/[^0-9]/g, ''))}
+                            />
+                          </View>
+
+                          <View style={[styles.inputGroup, { flex: 1 }]}>
+                            <Text style={styles.inputLabel}>Hedef Tekrar</Text>
+                            <TextInput
+                              style={styles.modalInput}
+                              placeholder="12"
+                              placeholderTextColor={Colors.textMuted}
+                              keyboardType="numeric"
+                              value={reps}
+                              onChangeText={(text) => setReps(text.replace(/[^0-9]/g, ''))}
+                            />
+                          </View>
+
+                          {/* RIR sadece Ağırlık tipinde göster */}
+                          {exerciseType === 'weight' && (
+                            <View style={[styles.inputGroup, { flex: 1 }]}>
+                              <Text style={styles.inputLabel}>RIR</Text>
+                              <TextInput
+                                style={styles.modalInput}
+                                placeholder="Örn: 1"
+                                placeholderTextColor={Colors.textMuted}
+                                keyboardType="numeric"
+                                value={rir}
+                                onChangeText={(text) => setRir(text.replace(/[^0-9]/g, ''))}
+                              />
+                            </View>
+                          )}
+                        </View>
+
+                        {/* RIR bilgi metni sadece Ağırlık tipinde */}
+                        {exerciseType === 'weight' && (
+                          <Text style={styles.rirInfoText}>
+                            RIR: Set bittiğinde yapabileceğiniz fazladan tekrar sayısıdır (0 = Tam Tükeniş)
+                          </Text>
+                        )}
+                      </>
+                    )}
 
                     {/* Action Buttons */}
                     <View style={styles.modalButtonContainer}>
@@ -622,6 +827,36 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 16,
     lineHeight: 18,
+  },
+
+  // Exercise Type Selector
+  typeButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  typeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.surfaceLight,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  typeButtonActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  typeButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  typeButtonTextActive: {
+    color: Colors.background,
   },
   modalButtonContainer: {
     flexDirection: 'row',

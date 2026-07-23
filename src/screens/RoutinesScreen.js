@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -18,6 +19,7 @@ import { Colors } from '../theme/colors';
 import { useLanguage } from '../context/LanguageContext';
 
 const ROUTINES_STORAGE_KEY = '@routines_list';
+const ACTIVE_PROGRAM_KEY = '@activeProgramId';
 
 const PROGRAM_ICONS = [
   { name: 'flame-outline', color: '#FF6B6B' },
@@ -59,15 +61,15 @@ function getInitialPrograms(t) {
   ];
 }
 
-function ProgramCard({ program, t, onPress, onDelete }) {
+function ProgramCard({ program, t, onPress, onDelete, isActive, onPressActive }) {
   return (
     <TouchableOpacity
-      style={styles.card}
+      style={[styles.card, isActive && styles.cardActive]}
       activeOpacity={0.7}
       onPress={onPress}
     >
       {/* Accent top border */}
-      <View style={[styles.cardAccent, { backgroundColor: program.accentColor }]} />
+      <View style={[styles.cardAccent, { backgroundColor: isActive ? '#00E5A0' : program.accentColor }]} />
 
       <View style={styles.cardContent}>
         {/* Left: Icon */}
@@ -89,9 +91,11 @@ function ProgramCard({ program, t, onPress, onDelete }) {
           <Text style={styles.cardTitle} numberOfLines={1}>
             {program.name}
           </Text>
-          <Text style={styles.cardDescription} numberOfLines={1}>
-            {program.description}
-          </Text>
+          {program.description ? (
+            <Text style={styles.cardDescription} numberOfLines={1}>
+              {program.description}
+            </Text>
+          ) : null}
           <View style={styles.cardMeta}>
             <View style={styles.metaItem}>
               <Ionicons
@@ -100,7 +104,7 @@ function ProgramCard({ program, t, onPress, onDelete }) {
                 color={Colors.textSecondary}
               />
               <Text style={styles.metaText}>
-                {t('routines.daysPerWeek', { count: program.daysPerWeek })}
+                {`Haftada ${program.activeDays || 0} Gün`}
               </Text>
             </View>
             <View style={styles.metaDot} />
@@ -111,7 +115,7 @@ function ProgramCard({ program, t, onPress, onDelete }) {
                 color={Colors.textSecondary}
               />
               <Text style={styles.metaText}>
-                {t('routines.exercises', { count: program.exerciseCount })}
+                {`${program.totalExercises || 0} Egzersiz`}
               </Text>
             </View>
           </View>
@@ -138,6 +142,21 @@ function ProgramCard({ program, t, onPress, onDelete }) {
           />
         </View>
       </View>
+
+      {/* Bottom: Active Button */}
+      <TouchableOpacity
+        style={[styles.activeButton, isActive && styles.activeButtonDisabled]}
+        activeOpacity={isActive ? 1 : 0.7}
+        disabled={isActive}
+        onPress={(e) => {
+          e.stopPropagation();
+          onPressActive();
+        }}
+      >
+        <Text style={[styles.activeButtonText, isActive && styles.activeButtonTextDisabled]}>
+          {isActive ? '✅ Aktif Program' : 'Aktif Yap'}
+        </Text>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 }
@@ -145,34 +164,80 @@ function ProgramCard({ program, t, onPress, onDelete }) {
 export default function RoutinesScreen({ navigation }) {
   const { t } = useLanguage();
   const [programs, setPrograms] = useState([]);
+  const [activeProgramId, setActiveProgramId] = useState(null);
 
-  // Load routines from AsyncStorage or fallback to initial programs
-  useEffect(() => {
-    const loadRoutines = async () => {
-      try {
-        const savedData = await AsyncStorage.getItem(ROUTINES_STORAGE_KEY);
-        if (savedData) {
-          const parsed = JSON.parse(savedData);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setPrograms(parsed);
-            return;
+  const DAY_NAMES = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+
+  // Programları yükle ve her biri için dinamik istatistikleri hesapla
+  useFocusEffect(
+    useCallback(() => {
+      const loadRoutines = async () => {
+        try {
+          let routinesList = [];
+          const savedData = await AsyncStorage.getItem(ROUTINES_STORAGE_KEY);
+          if (savedData) {
+            const parsed = JSON.parse(savedData);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              routinesList = parsed;
+            }
           }
-        }
-        // Fallback if empty
-        const initial = getInitialPrograms(t);
-        setPrograms(initial);
-        await AsyncStorage.setItem(ROUTINES_STORAGE_KEY, JSON.stringify(initial));
-      } catch (error) {
-        console.warn('Programlar yüklenirken hata:', error);
-        setPrograms(getInitialPrograms(t));
-      }
-    };
 
-    loadRoutines();
-  }, [t]);
+          // Fallback if empty
+          if (routinesList.length === 0) {
+            routinesList = getInitialPrograms(t);
+            await AsyncStorage.setItem(ROUTINES_STORAGE_KEY, JSON.stringify(routinesList));
+          }
+
+          // Her program için dinamik activeDays ve totalExercises hesapla
+          const enrichedRoutines = await Promise.all(
+            routinesList.map(async (program) => {
+              let activeDays = 0;
+              let totalExercises = 0;
+
+              for (const dayName of DAY_NAMES) {
+                try {
+                  const key = `@program_${program.id}_${dayName}`;
+                  const dayData = await AsyncStorage.getItem(key);
+                  if (dayData) {
+                    const parsed = JSON.parse(dayData);
+                    if (parsed.exercises && Array.isArray(parsed.exercises) && parsed.exercises.length > 0) {
+                      activeDays += 1;
+                      totalExercises += parsed.exercises.length;
+                    }
+                  }
+                } catch (_) {
+                  // Tek bir gün okunamazsa devam et
+                }
+              }
+
+              return { ...program, activeDays, totalExercises };
+            })
+          );
+
+          setPrograms(enrichedRoutines);
+
+          // Aktif program id'sini çek
+          const storedActiveId = await AsyncStorage.getItem(ACTIVE_PROGRAM_KEY);
+          if (storedActiveId) {
+            setActiveProgramId(storedActiveId);
+          } else if (enrichedRoutines.length > 0) {
+            // Hiç aktif program yoksa ilkini aktif yap
+            setActiveProgramId(enrichedRoutines[0].id);
+            await AsyncStorage.setItem(ACTIVE_PROGRAM_KEY, enrichedRoutines[0].id);
+          }
+        } catch (error) {
+          console.warn('Programlar yüklenirken hata:', error);
+          setPrograms(getInitialPrograms(t));
+        }
+      };
+
+      loadRoutines();
+    }, [t])
+  );
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [newRoutineName, setNewRoutineName] = useState('');
+  const [newRoutineDescription, setNewRoutineDescription] = useState('');
 
   const handleOpenModal = () => {
     setIsModalVisible(true);
@@ -181,6 +246,7 @@ export default function RoutinesScreen({ navigation }) {
   const handleCloseModal = () => {
     setIsModalVisible(false);
     setNewRoutineName('');
+    setNewRoutineDescription('');
   };
 
   const handleCreateRoutine = async () => {
@@ -192,9 +258,9 @@ export default function RoutinesScreen({ navigation }) {
     const newProgram = {
       id: Date.now().toString(),
       name: trimmedName,
-      description: 'Yeni Oluşturulan Program',
-      daysPerWeek: 0,
-      exerciseCount: 0,
+      description: newRoutineDescription.trim() || '',
+      activeDays: 0,
+      totalExercises: 0,
       icon: randomIcon,
       accentColor: randomIcon.color,
     };
@@ -251,6 +317,22 @@ export default function RoutinesScreen({ navigation }) {
     });
   };
 
+  const handleSetActiveProgram = async (programId) => {
+    try {
+      await AsyncStorage.setItem(ACTIVE_PROGRAM_KEY, programId);
+      setActiveProgramId(programId);
+
+      const successMessage = 'Program aktif olarak ayarlandı!';
+      if (Platform.OS === 'web') {
+        window.alert(successMessage);
+      } else {
+        Alert.alert('Başarılı', successMessage);
+      }
+    } catch (error) {
+      console.warn('Aktif program kaydedilirken hata:', error);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -278,8 +360,10 @@ export default function RoutinesScreen({ navigation }) {
             key={program.id}
             program={program}
             t={t}
+            isActive={program.id === activeProgramId}
             onPress={() => handleProgramPress(program)}
             onDelete={handleDeleteRoutine}
+            onPressActive={() => handleSetActiveProgram(program.id)}
           />
         ))}
 
@@ -314,7 +398,7 @@ export default function RoutinesScreen({ navigation }) {
 
                 <Text style={styles.modalTitle}>{t('routines.addNew')}</Text>
 
-                {/* Input Field */}
+                {/* Input Fields */}
                 <TextInput
                   style={styles.modalInput}
                   placeholder="Antrenman Adı, örn: Bacak Günü"
@@ -322,6 +406,14 @@ export default function RoutinesScreen({ navigation }) {
                   value={newRoutineName}
                   onChangeText={setNewRoutineName}
                   autoFocus={true}
+                />
+
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Açıklama (Örn: Kas büyümesi odaklı)"
+                  placeholderTextColor={Colors.textMuted}
+                  value={newRoutineDescription}
+                  onChangeText={setNewRoutineDescription}
                 />
 
                 {/* Action Buttons */}
@@ -429,6 +521,10 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     overflow: 'hidden',
   },
+  cardActive: {
+    borderColor: '#00E5A0' + '60',
+    borderWidth: 1.5,
+  },
   cardAccent: {
     height: 3,
     borderTopLeftRadius: 16,
@@ -496,6 +592,25 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceLight,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  activeButton: {
+    paddingVertical: 12,
+    backgroundColor: Colors.surfaceLight,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeButtonDisabled: {
+    backgroundColor: 'rgba(0, 229, 160, 0.08)',
+  },
+  activeButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  activeButtonTextDisabled: {
+    color: '#00E5A0',
   },
 
   // FAB
